@@ -1,0 +1,2 @@
+#! /bin/csh
+setenv PREFIX "$HOME/workbak/PGEN/g2g/legacy/os/$NA_OS"

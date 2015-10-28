@@ -1,0 +1,82 @@
+#include "geminc.h"
+#include "gemprm.h"
+#include "cnf.h"
+
+void cnf_plin ( int *iret )
+
+/************************************************************************
+ * cnf_plin								*
+ *                                                                      *
+ * This function plots all the contour lines.				*
+ *                                                                      *
+ * void cnf_plin ( iret )						*
+ *                                                                      *
+ * Input parameters:                                                    *
+ *                                                                      *
+ * Output parameters:                                             	*
+ *  *iret	int	Return code					*
+ *			= 0 - normal					*
+ *                                                                      *
+ **                                                                     *
+ * Log:                                                                 *
+ * D.W.Plummer/NCEP	 4/04						*
+ ***********************************************************************/
+
+{
+int	ii, iptr, zero=0, nbytes, ier;
+float	*x, *y;
+
+int	isltyp, islstr, isldir, islwid;
+float	slsiz;
+/*---------------------------------------------------------------------*/
+
+    *iret = 0;
+
+    G_MALLOC ( x, float, LLMXPT, "CNTR x" );
+    G_MALLOC ( y, float, LLMXPT, "CNTR y" );
+
+isltyp = 22; islstr = 0; isldir = 0; slsiz = 0.6; islwid = 1;
+gsspln( &isltyp, &islstr, &isldir, &slsiz, &islwid, &ier );
+
+/* printf(" BEGIN CONTOUR LINE DRAW, Total number of lines = %d\n", _cntrs.ncntrs ); */
+
+    for ( ii = 0; ii < _cntrs.ncntrs; ii++ )  {
+
+	if ( _cntrs.cntr[ii] != NULL_CNF_CNTR )  {
+        /*
+         *  Only consider lines that are true contour lines,
+	 *  i.e., skip those exclusively involved in contour fill.
+         */
+/* printf("value=%f\n", _cntrs.cntr[ii]->value ); */
+            cnf_ginx ( &(_cntrs.cntr[ii]->value), &iptr, &ier );
+/* printf("iptr=%d\n", iptr ); */
+
+	    if ( _cftype[iptr] >= 0 )  {
+/* printf("_cftype[iptr]=%d\n", _cftype[iptr] ); */
+
+/* printf("_cntrs.cntr[ii]->npts=%d\n", _cntrs.cntr[ii]->npts ); */
+
+	        nbytes = _cntrs.cntr[ii]->npts * sizeof(float);
+	        memcpy( x, _cntrs.cntr[ii]->x, nbytes );
+	        memcpy( y, _cntrs.cntr[ii]->y, nbytes );
+
+	        gscolr( &(_lcolr[iptr]), &ier );
+	        gsline( &(_ltype[iptr]), &(zero), &(_lwidt[iptr]), 
+		        &(zero), &ier );
+/* 	        gspln( sys_G, &(_cntrs.cntr[ii]->npts), x, y, &ier, strlen(sys_G) ); */
+	        gline( sys_G, &(_cntrs.cntr[ii]->npts), x, y, &ier, strlen(sys_G) );
+/* printf("Plotting line w/ %d points using color %d\n", */
+/* _cntrs.cntr[ii]->npts, _lcolr[iptr] ); */
+
+	    }
+	}
+    }
+
+    G_FREE ( y, float );
+    G_FREE ( x, float );
+
+/* printf(" END LINE DRAW\n"); */
+
+}
+
+/*=====================================================================*/

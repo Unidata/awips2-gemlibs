@@ -1,0 +1,199 @@
+#include "geminc.h"
+#include "gemprm.h"
+
+int g2g_driver( int kx, int ky, int nlines, 
+                int *nlatlons, double *latPts, double *lonPts,
+                int *nsmthpts, double *smthLat, double *smthLon,
+                int *nextpts,  double *extLat, double *extLon,
+		double *values, int *ksmth,  int *iclosed,		
+		char *catmap, char *hstgrd,  
+		char *discrete, char *dlines, char *bounds, 
+    		char *gglimt, char *edgeopts )
+/************************************************************************
+ * g2g_driver								*
+ *									*
+ * This program executes the graph-to-grid algorithm.			*
+ *                                                                      *
+ * Input parameters:                                                    *
+ *  KX		int	Number of grid points in x			*
+ *  KY		int	Number of grid points in y			*
+ *  MAXGRD    		Maximum number of grids				*
+ *  CATMAP	char*   s1=x;s2=y;...sN=z				*
+ *  HISTGRD   	char*	Toggle writing history grid (y/n)		*
+ *  DISCRETE	char*   a-b=x;c-d=y;e-f=z				*
+ *  DLINES	char*   [yes/no][;yes/no] | epsilon			*
+ *  BOUNDS	char*	BOUNDS name|<key>key_name|mask_flag		*
+ *  GGLIMS    	char*   Grid value limitations and control		*
+ *  EDGEOPTS	char*  	Option to specify boundary conditions.		*
+ *                                                            		*
+ * Output parameters:                                          		*
+ *      GRID(*)         REAL            Data grid			*
+ *									*
+ **									*
+ * Log:									*
+ * J. Wu/Chugach      03/10   Created    				*
+ ***********************************************************************/
+{
+    int		ii, jj, ier, npts, ninmap, ninsmth, ninext;
+//    int		mm, nn;
+    float	lineValue;
+    float	*grid, *hist, *buflat, *buflon;
+//    float	*bufsmthlat, *bufsmthlon, *bufextlat, *bufextlon;
+/*---------------------------------------------------------------------*/
+
+    /*
+     *  Initialize graph-to-grid common area "grphgd.cmn"
+     */
+    printf( "Initialize g2g lib\n");
+    printf( "kx = %d\n", kx ); 
+    printf( "ky = %d\n", ky ); 
+    printf( "nlines = %d\n", nlines ); 
+    for ( ii = 0; ii < nlines; ii++ ) {
+        printf( "ii = %d  nlatlons[%d] = %d\n", ii, ii, nlatlons[ii] );         
+        printf( "ii = %d  nsmthpts[%d] = %d\n", ii, ii, nsmthpts[ii] );         
+        printf( "ii = %d  nextpts[%d] = %d\n", ii, ii, nextpts[ii] );         
+    }
+//    printf( "ntotal = %d\n", ntotal ); 
+    
+//    nkk = 0;
+//    for ( ii = 0; ii < nlines; ii++ ) {
+//	printf( "line %d has %d points as: \n", ii,  nlatlons[ii] );
+//        for ( jj = 0; jj < nlatlons[ ii ]; jj++ ) {
+//	    printf( "%f8.2\n", latPts[ nkk + jj ] );
+//	}
+//    }
+                    
+    
+    g2g_init( &ier );
+        
+    
+    /*
+     * Set lines.
+     */
+    printf( "Set lines and values nlines = %d\n" + nlines ); 
+    ninmap = 0;
+    ninsmth = 0;
+    ninext = 0;
+    
+    for ( ii = 0; ii < 3; ii++ ) {
+         printf( " set line %d\n", ii ); 
+       
+	g2g_setdata( &nlines, nlatlons, (float *)latPts, (float *)lonPts,
+                  nsmthpts, (float *)smthLat, (float *)smthLon,
+                  nextpts,  (float *)extLat, (float *)extLon,
+     		  (float *)values, ksmth,  iclosed, &ier );     
+         printf( " set line %d done\n", ii ); 
+    }
+    
+    printf( "after call G2G_SETDATA nlines = %d\n" + nlines ); 
+
+/*    
+    for ( ii = 0; ii < nlines; ii++ ) {
+        
+        printf( " set line %d\n", ii ); 
+	G_MALLOC ( buflat, float, nlatlons[ ii ], "Error allocating buflat" );
+        G_MALLOC ( buflon, float, nlatlons[ ii ], "Error allocating buflon" );
+        printf( "a0\n"); 
+ 	for ( jj = 0; jj < nlatlons[ ii ]; jj++ ) {
+	    buflat[ jj ] =  latPts[ jj + ninmap ]; 
+	    buflon[ jj ] =  lonPts[ jj + ninmap ]; 
+	}
+	
+	g2g_slatlon( &nlatlons[ ii ], buflat, buflon, &ier ); 
+	
+	ninmap +=  nlatlons[ ii ];
+		
+	
+	G_FREE( buflat, float ); 
+	G_FREE( buflon, float ); 
+        
+	printf( "  set line %d done\n" + ii );
+	nkk++; 
+    }
+    
+   
+    printf( "\n\nset smooth line nlines = %d\n", nlines ); 
+    for ( ii = 0; ii < nlines; ii++ ) {
+        
+       printf( " set smooth line %d\n", ii ); 
+		
+	G_MALLOC ( bufsmthlat, float, nsmthpts[ ii ], "Error allocating bufsmthlat" );
+        G_MALLOC ( bufsmthlon, float, nsmthpts[ ii ], "Error allocating bufsmthlon" );
+        printf( "b1\n"); 
+ 	for ( jj = 0; jj < nsmthpts[ ii ]; jj++ ) {
+	    bufsmthlat[ jj ] =  smthLat[ jj + ninsmth ]; 
+	    bufsmthlon[ jj ] =  smthLon[ jj + ninsmth ]; 
+	}
+        printf( "b2\n"); 
+	
+	lineValue = values[ ii ];	
+	g2g_soriglns( &nsmthpts[ ii ], bufsmthlat, bufsmthlon, 
+	              &lineValue,  &ismth[ ii ], &iclosed[ ii ], &ier ); 
+        printf( "b3\n"); 
+
+	ninsmth += nsmthpts[ ii ];
+        printf( "b\n"); 
+	
+	G_FREE( bufsmthlat, float ); 
+	G_FREE( bufsmthlon, float ); 
+	printf( "  set smooth line %d done\n" + ii );
+
+    }
+    
+    printf( "\n\nset ext line nlines = %d\n", nlines ); 
+    for ( ii = 0; ii < nlines; ii++ ) {
+        
+       printf( " set ext line %d\n", ii ); 
+		
+	G_MALLOC ( bufextlat, float, nextpts[ ii ], "Error allocating bufextlat" );
+        G_MALLOC ( bufextlon, float, nextpts[ ii ], "Error allocating bufextlon" );
+ 	for ( jj = 0; jj < nextpts[ ii ]; jj++ ) {
+	    bufextlat[ jj ] =  extLat[ jj + ninext ]; 
+	    bufextlon[ jj ] =  extLon[ jj + ninext ]; 
+	}
+		
+	g2g_sxtdlns( &nextpts[ ii ], bufextlat, bufextlon, &ier ); 
+	
+	ninext += nextpts[ ii ];
+        printf( "c\n"); 
+	       	
+	
+	G_FREE( bufextlat, float ); 
+	G_FREE( bufextlon, float ); 
+        
+	printf( "  set line %d done\n" + ii );
+ 
+    }
+*/     
+     /*
+     *  Process the user inputs
+     */    
+    printf( "processing options\n");    
+//    g2g_param( catmap, discrete, dlines, bounds, gglimt, edgeopts,
+//               &ier,strlen(catmap), strlen(discrete), strlen(dlines),
+//	       strlen(bounds), strlen(gglimt), strlen(edgeopts) );
+   
+    /*
+     * Main loop.
+     */
+    printf( "Run ggcalc\n");
+    npts = LLMXTG;
+    G_MALLOC ( grid, float, npts, "Error allocating grid" );
+    G_MALLOC ( hist, float, npts, "Error allocating grid" );
+
+//	ggdriv ( grid, grid1, &kx, &ky, hist, work1, work2, work3, 
+//		 buffer, &rspflg, &ier );
+       
+    
+//    g2g_calc ( grid, &kx, &ky, hist, &ier );
+    printf( "Finish ggcalc\n");
+
+    
+    G_FREE ( hist, float );
+    G_FREE ( grid, float );
+    
+    printf( "complete g2g\n");
+
+    return 0;
+
+}

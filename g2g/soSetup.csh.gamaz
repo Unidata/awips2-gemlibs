@@ -1,0 +1,31 @@
+#!/bin/csh
+rm -f *.o *.so
+set OS_LIB = "/export-1/cdbsrv/nawdev/nawips/os/linux2.6.18el32/lib"
+set myLinkflags = "-L/usr1/gamaz/lib -shared -Wl,-soname,libdmtest.so -o libdmtest.so "
+#set myLinkflags = "-L/usr/lib/gcc/i386-redhat-linux/3.4.6/libg2c.so -shared -Wl,-soname,libdmtest.so -o libdmtest.so "
+echo $myLinkflags
+
+set myFflags = "-I/export/cdbsrv/gamaz/WORK/AWIPS2/DM_GDLIST/gempak/include -fPIC -g -c -Wall -fno-second-underscore "
+
+set myCflags = "-I/export/cdbsrv/gamaz/WORK/AWIPS2/DM_GDLIST/os/linux2.6.18el32/../../gempak/include -I/export/cdbsrv/gamaz/WORK/AWIPS2/DM_GDLIST/os/linux2.6.18el32/include -I/export-1/cdbsrv/nawdev/nawips/gempak/include -I/export-1/cdbsrv/nawdev/nawips/os/linux2.6.18el32/include -DLinux -DUNDERSCORE -I/usr/X11R6/include -g -Wall -W -Wno-unused-parameter -Wfloat-equal -Wundef -Wpointer-arith -Wbad-function-cast -Wcast-align -Wsign-compare -Waggregate-return -Wstrict-prototypes -Wmissing-prototypes -Wmissing-declarations -Wmissing-noreturn -Wpacked -Wredundant-decls -Wnested-externs -Wunreachable-code -Winline -Wlong-long -g -Wall -W -Wno-unused-parameter -Wfloat-equal -Wundef -Wpointer-arith -Wbad-function-cast -Wcast-align -Wsign-compare -Waggregate-return -Wstrict-prototypes -Wmissing-prototypes -Wmissing-declarations -Wmissing-noreturn -Wpacked -Wredundant-decls -Wnested-externs -Wunreachable-code -Winline -Wlong-long -I/export-1/cdbsrv/nawdev/nawips/os/linux2.6.18el32/include/libxml2 -DDEBUG -c "
+
+#set myLibs = "$OS_LIB/libgemlib.a $OS_LIB/libsyslib.a $OS_LIB/libtextlib.a $OS_LIB/libxslt.a $OS_LIB/libxml2.a $OS_LIB/libiconv.a $OS_LIB/libz.a"
+set myLibs = "$OS_LIB/libgemlib.a $OS_LIB/libtextlib.a $OS_LIB/libxslt.a $OS_LIB/libxml2.a $OS_LIB/libiconv.a $OS_LIB/libz.a"
+
+set myLinktail = "-lg2c -lc"
+
+echo "my...flags have been set"
+echo "executing gcc "\$myCflags" *.c to compile C functions..."
+gcc $myCflags *.c 
+echo "... and done"
+echo "executing g77 "\$myFflags" *.f to compile Fortran functions..."
+g77 $myFflags *.f
+echo "... and done"
+#echo "to create a so object: gcc "\$myLinkflags" *.o lib/cgemlib/*.o "\$myLibs" "\$myLinktail
+echo "creating a so object: gcc "\$myLinkflags" *.o lib/cgemlib/*.o "\$myLibs" "\$myLinktail"..."
+gcc $myLinkflags *.o " lib/cgemlib/*.o "$myLibs $myLinktail
+echo "... and done"
+echo "deploying the so to "\$GEMPAK_SO"/lib ..."
+cp libdmtest.so $GEMPAK_SO/lib/.
+echo "... and done"
+echo "do not forget to have "\$GEMPAK_SO"/lib added to your "\$LD_PRELOAD_PATH

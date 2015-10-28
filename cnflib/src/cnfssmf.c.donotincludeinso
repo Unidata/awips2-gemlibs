@@ -1,0 +1,36 @@
+#include "geminc.h"
+#include "gemprm.h"
+#include "cnf.h"
+
+/* -------------------------------------------------------------------- */
+
+void cnf_ssmf ( float *s, float *f )
+/************************************************************************
+ * cnf_ssmf								*
+ *                                                                      *
+ * This function sets the smoothing and filter factors.			*
+ *                                                                      *
+ * void cnf_ssmf ( s, f )						*
+ *                                                                      *
+ * Input parameters:                                                    *
+ *  *s		float	Smoothing					*
+ *  *f		float	Filtering					*
+ *                                                                      *
+ * Output parameters:                                             	*
+ *  none								*
+ *                                                                      *
+ **                                                                     *
+ * Log:                                                                 *
+ * D.W.Plummer/NCEP	04/04						*
+ ***********************************************************************/
+
+{
+/*---------------------------------------------------------------------*/
+
+    _smooth = *s;
+    _filtln = *f;
+
+
+}
+
+/*=====================================================================*/

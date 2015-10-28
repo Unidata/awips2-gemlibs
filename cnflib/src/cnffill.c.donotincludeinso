@@ -1,0 +1,777 @@
+#include "geminc.h"
+#include "gemprm.h"
+#include "cnf.h"
+
+/* -------------------------------------------------------------------- */
+
+/*
+ * Local global defines
+ */
+#define FORWARD         	CNF_CNTR_START
+#define BACKWARD        	CNF_CNTR_END
+#define CLOSED          	-1
+
+#define CNF_FILL_NO_COLOR       -1
+#define USED        		-2
+
+#define MAX_FILL_PTS    	( LLMXPT )
+
+#define FILTER_STRT    		0.0F
+#define FILTER_STOP    		9.9F
+#define FILTER_INCR    		0.1F
+
+/*
+ * Local global variables
+ */
+float   *_x, *_y;			/* Primary polygon arrays	*/
+int	_npts;				/* Number of pts in primary	*/
+float   *_x_rduc, *_y_rduc;		/* Reduction polygon arrays     */
+int	_npts_rduc;			/* Number of pts in reduced	*/
+
+int	_n_alloc;			/* Current allocation of above	*/
+
+int	_color;				/* Polygon fill color		*/
+int	_type;				/* Polygon fill type		*/
+
+int	_which[] = { 1, -1 };
+int	_nclsd;
+short	*_clsd, *_test;
+int	*_inout;
+float	*_xtest, *_ytest;
+int	_max_depth;
+
+float	_filter;			/* Filter factor for CV_RDUC	*/
+
+int	_n_fillUsed;			/* Number of used lines (temp)	*/
+struct	fillused 
+{
+    CNF_CNTR	*cntr;
+    int		drct;
+};
+struct  fillused	*_fillUsed;	/* Used line info (temp)	*/
+
+
+
+/*
+ * Local global function prototypes
+ */
+int	fill_GenPoly ( CNF_CNTR *cntr, int dir );
+int	fill_AddHoles   ( int depth, float value, int numin, short *in );
+void 	fill_ClsdPrep ( void );
+void    fill_QInside  ( float *x, float *y, int npts, CNF_RANGE range, 
+		int ncl, int *nin, short **inside );
+void	fill_CalcRange    ( float *x, float *y, int np, CNF_RANGE *rng );
+void	fill_Add      ( int which, float *x, float *y, int np );
+void	fill_ChkPts ( int np );
+void	fill_Reduce ( int nin, float *xin, float *yin,
+		      int *nout, float *xout, float *yout );
+void	fill_InitUsed ( void );
+void	fill_SetUsed ( CNF_CNTR *cntr, int drct );
+void	fill_AssignUsed ( void );
+
+/* -------------------------------------------------------------------- */
+
+void cnf_fill ( int *iret )
+
+/************************************************************************
+ * cnf_fill								*
+ *                                                                      *
+ * This function computes fill polygons from contour lines and edges.	*
+ *                                                                      *
+ * void cnf_fill ( iret )						*
+ *                                                                      *
+ * Input parameters:                                                    *
+ *                                                                      *
+ * Output parameters:                                             	*
+ *  *iret		int	Return code				*
+ *                                                                      *
+ **                                                                     *
+ * Log:                                                                 *
+ * D.W.Plummer/NCEP	 4/04						*
+ ***********************************************************************/
+{
+int		nc, d, depth, numin, nbytes, done, ier, ichk;
+int		dir[] = { FORWARD, BACKWARD };
+float		xcent, ycent, area, value, one=1.0F;
+CNF_CNTR	*cntr;
+CNF_RANGE	rng;
+short		*in;
+/*---------------------------------------------------------------------*/
+
+    *iret = 0;
+/* printf("CNF_FILL ...\n"); */
+
+    fill_ClsdPrep ( );
+/* printf("CNF_FILL ... fill_ClsdPrep done.\n"); */
+/* float szfil=0.0F; */
+/* int iftyp=1; */
+/* gsfill ( &szfil, &iftyp, &ier ); */
+
+    _n_alloc = MAX_FILL_PTS * 2;
+    G_MALLOC ( _x, float, _n_alloc, "_x" );
+    G_MALLOC ( _y, float, _n_alloc, "_y" );
+    G_MALLOC ( _x_rduc, float, _n_alloc, "_x_rduc" );
+    G_MALLOC ( _y_rduc, float, _n_alloc, "_y_rduc" );
+    G_MALLOC ( _fillUsed, struct fillused, _cntrs.ncntrs, "_fillUsed" );
+
+    for ( nc = 0; nc < _cntrs.ncntrs; nc++ )  {
+
+      cntr = _cntrs.cntr[nc];
+
+      if ( cntr != NULL_CNF_CNTR  &&
+	   cntr->status == CNF_OPEN  &&
+	   cntr->level != IMISSD  &&
+	   _cftype[_cntrs.cntr[nc]->level] <= 0 )  {
+
+	for ( d = 0; d <= 1; d++ )  {
+
+	  if ( _cntrs.cntr[nc]->used[dir[d]] == G_FALSE )  {
+/* if(nc==0)printf("Line %d, level=%d, value=%f, d=%d, npts=%d\n",  */
+/* nc, _cntrs.cntr[nc]->level, _cntrs.cntr[nc]->value, d, _cntrs.cntr[nc]->npts ); */
+	    fill_InitUsed ( );
+	    ichk = fill_GenPoly(_cntrs.cntr[nc],dir[d]);
+
+	    if ( ichk == G_NORMAL ) {
+/* if(nc==0)printf("Line %d, _color=%d, _npts=%d\n", nc, _color, _npts ); */
+
+	      fill_CalcRange ( _x, _y, _npts, &rng );
+
+/* if(nc==0)printf("before fill_QInside - _npts=%d\n", _npts ); */
+	      fill_QInside ( _x, _y, _npts, rng, IMISSD, &numin, &in );
+
+	      _filter = FILTER_STRT;
+	      done = G_FALSE;
+	      while ( done == G_FALSE )  {
+
+		if ( _npts < MAX_FILL_PTS )  {
+
+	          fill_AddHoles( 0, RMISSD, numin, in );
+
+		  if ( _npts < MAX_FILL_PTS )  {
+/*SAG
+	            gscolr ( &_color, &ier );
+	            gsfill ( &one, &_type, &ier );
+	            gfill ( sys_G, &_npts, _x, _y, &ier, strlen(sys_G) );   SAG*/
+/* if(_filter!=FILTER_STRT)printf("Line %d, _filter=%0.1f, _npts=%d\n", nc, _filter, _npts ); */
+/* _color=7; */
+/* gscolr ( &_color, &ier ); */
+/* if(nc==0) */
+/* gline ( sys_G, &_npts, _x, _y, &ier, strlen(sys_G) ); */
+
+/*SAG		    done = G_TRUE;
+	      	    if ( _filter > FILTER_STRT )  {
+		      printf("WARNING: POLYGON (%d pts) FILTERED w/ FACTOR %0.1f\n", _npts, _filter );
+	      }
+SAG*/
+		  }
+		  else {
+/* 		    printf("UNABLE TO PROCESS POLYGON (holes) w/ %d POINTS w/ filter %0.1f.\n", _npts, _filter ); */
+		  }
+
+
+		}
+		else {
+/* 		  printf("UNABLE TO PROCESS POLYGON w/ %d POINTS w/ filter %0.1f.\n", _npts, _filter ); */
+		}
+
+		if ( done == G_FALSE )  {
+		  if ( _filter > FILTER_STOP )  {
+		    done = G_TRUE;
+		    printf("UNABLE TO PROCESS POLYGON w/ %d POINTS w/ filter %0.1f.\n", _npts, FILTER_STOP );
+		  }
+		  else  {
+		    _filter += FILTER_INCR;
+	    	    fill_InitUsed ( );
+	            ichk = fill_GenPoly(_cntrs.cntr[nc],dir[d]);
+
+		  }
+		}
+
+	      }		/* end while 	*/
+	      G_FREE ( in, short );
+
+	    }
+	    fill_AssignUsed ( );
+	  }
+	}
+      }
+    }
+
+    /*
+     * Now fill all CNF_CLOSED/CNF_HOLE contours.
+     */
+    for ( depth = 0; depth <= _max_depth; depth++ )  {
+
+      for ( nc = 0; nc < _cntrs.ncntrs; nc++ )  {
+
+	cntr = _cntrs.cntr[nc];
+
+        if ( cntr != NULL_CNF_CNTR &&
+	     ( cntr->status == CNF_CLOSED || cntr->status == CNF_HOLE )  &&
+	     cntr->depth == depth &&
+	     _cftype[cntr->level] <= 0 )  {
+
+    	    _color = IMISSD;
+	    nbytes = (cntr->npts)*sizeof(float);
+    	    memcpy ( _x, cntr->x, nbytes );
+    	    memcpy ( _y, cntr->y, nbytes );
+    	    _npts = cntr->npts;
+	    value = cntr->value;
+
+	    if ( fill_AddHoles( depth, value, 
+			cntr->ninside, cntr->inside ) == G_NORMAL ) {
+
+    	    if ( _color == IMISSD )  {
+		cgr_centroid ( cntr->x, cntr->y, &(cntr->npts),
+			&xcent, &ycent, &area, &ier );
+		if ( area < 0 )  {
+    	    	    cnf_gcol ( cntr->value, _which[FORWARD], &_color, &_type, &ier );
+		}
+		else if ( area > 0 )  {
+    	    	    cnf_gcol ( cntr->value, _which[BACKWARD], &_color, &_type, &ier );
+		}
+		else  {
+		    if ( _npts != 5 )  {
+/* 	    	      printf ( "UNABLE to FIGURE COLOR; _npts = %d\n", _npts ); */
+	    	      _color = 31;
+	    	      _type  = 1;
+		    }
+		}
+    	    }
+
+	    if ( _color != 0 )  {
+
+	      gscolr ( &_color, &ier );
+	      gsfill ( &one, &_type, &ier );
+	      gfill ( sys_G, &_npts, _x, _y, &ier, strlen(sys_G) );
+
+	    }
+	  }
+        }
+      }
+    }
+/* printf("CNF_FILL ... 3\n"); */
+
+    G_FREE ( _fillUsed, struct fillused );
+
+    G_FREE ( _y_rduc, float );
+    G_FREE ( _x_rduc, float );
+    G_FREE ( _y, float );
+    G_FREE ( _x, float );
+
+    G_FREE ( _ytest, float );
+    G_FREE ( _xtest, float );
+    G_FREE ( _inout, int );
+    G_FREE (  _test, short );
+    G_FREE (  _clsd, short );
+
+}
+
+/*=====================================================================*/
+
+int	fill_GenPoly ( CNF_CNTR *contour, int direction)
+/************************************************************************
+ * fill_GenPoly							*
+ *                                                                      *
+ * This function generates a fill polygon starting from a contour line.	*
+ *                                                                      *
+ * void fill_GenPoly ( contour, direction)				*
+ *                                                                      *
+ * Input parameters:                                                    *
+ *  *contour	CNF_CNTR	Contour line				*
+ *  direction	int		Contour line direction			*
+ *                                                                      *
+ * Output parameters:                                             	*
+ *  none								*
+ *                                                                      *
+ * Returned parameters:                                             	*
+ *  fill_GenPoly	int	Return code				*
+ *                                                                      *
+ **                                                                     *
+ * Log:                                                                 *
+ * D.W.Plummer/NCEP	 4/04						*
+ ***********************************************************************/
+{
+int		drct, np, ier;
+CNF_EDGEPT	*ept_start, *ept, *ept_tmp;
+CNF_CNTR	*cntr;
+/*---------------------------------------------------------------------*/
+
+    drct = direction;
+    cntr = contour;
+
+    cnf_gcol ( cntr->value, _which[drct], &_color, &_type, &ier );
+
+    if ( _color == 0 )  {
+	fill_SetUsed ( cntr, drct );
+	return ( CNF_FILL_NO_COLOR );
+    }
+
+    if ( drct == FORWARD )  {
+        ept_start = cntr->first;
+    }
+    else  {
+        ept_start = cntr->last;
+    }
+
+    _npts = 0;
+    ept = NULL_CNF_EDGEPT;
+    do {
+
+	fill_SetUsed ( cntr, drct );
+	fill_Add ( drct, cntr->x, cntr->y, cntr->npts );
+
+	if ( drct == FORWARD )  {
+	    ept = cntr->last;
+	}
+	else  {
+	    ept = cntr->first;
+	}
+
+        cntr->used[drct] = G_TRUE;
+
+	ept_tmp = ept->next;
+
+	np = 0;
+	ept = ept->next;
+	while ( ept->cntr == NULL_CNF_CNTR )  {
+	    np += 1;
+	    ept = ept->next;
+	}
+
+        fill_ChkPts ( np+1 );
+
+	ept = ept_tmp;
+	while ( ept->cntr == NULL_CNF_CNTR )  {
+	    _x[_npts] = ept->pt->x;
+	    _y[_npts] = ept->pt->y;
+	    _npts += 1;
+	    ept = ept->next;
+	}
+
+	cntr = ept->cntr;
+	drct = ept->drct;
+
+    } while ( ept != ept_start );
+
+    /*
+     * Repeat the starting point to make a fully closed polygon.
+     * Note - 'fill_ChkPts' has checked/allowed for one more point.
+     */
+    _x[_npts] = _x[0];
+    _y[_npts] = _y[0];
+    _npts += 1;
+
+    return ( G_NORMAL );
+
+}
+
+/*=====================================================================*/
+
+int	fill_AddHoles ( int depth, float value, int numin, short *in )
+/************************************************************************
+ * fill_AddHoles							*
+ *                                                                      *
+ * This function generates a fill polygon starting from a closed	*
+ * contour line.							*
+ *                                                                      *
+ * void fill_AddHoles ( depth, value, numin, in )			*
+ *                                                                      *
+ * Input parameters:                                                    *
+ *                                                                      *
+ * Output parameters:                                             	*
+ *  none								*
+ *                                                                      *
+ * Returned parameters:                                             	*
+ *  fill_AddHoles	int	Return code				*
+ *                                                                      *
+ **                                                                     *
+ * Log:                                                                 *
+ * D.W.Plummer/NCEP	 4/04						*
+ ***********************************************************************/
+{
+int		nin, np;
+CNF_CNTR	*cntr;
+float		*x, *y;
+/*---------------------------------------------------------------------*/
+
+    for ( nin = 0; nin < numin; nin++ )  {
+
+      cntr = _cntrs.cntr[in[nin]];
+
+      if ( cntr != NULL_CNF_CNTR  && cntr->depth == (depth+1) )  {
+
+	np = cntr->npts;
+
+	x = cntr->x;
+	y = cntr->y;
+
+	fill_Add ( CLOSED, x, y, np );
+
+      }
+    }
+
+    return ( G_NORMAL );
+
+}
+
+/*=====================================================================*/
+
+void fill_ClsdPrep ( void )
+/************************************************************************
+ * fill_ClsdPrep							*
+ *                                                                      *
+ * This function preps the contents of the global structures.		*
+ * Note that any non-G_NORMAL return is FATAL and contour fill 		*
+ * processing will fail if allowed to continue.				*
+ *                                                                      *
+ * void fill_ClsdPrep ( void )						*
+ *                                                                      *
+ * Input parameters:                                                    *
+ *  none								*
+ *                                                                      *
+ * Output parameters:                                             	*
+ *  *iret	int	Return code					*
+ *			= G_NORMAL - normal				*
+ *			= -1 = cannot place contour line endpoints	*
+ *			= -2 = cannot link edges			*
+ *                                                                      *
+ **                                                                     *
+ * Log:                                                                 *
+ * D.W.Plummer/NCEP	02/04						*
+ ***********************************************************************/
+{
+int	nc, ncl;
+/*---------------------------------------------------------------------*/
+
+    /*
+     * For all the closed contour lines, determine which ones lie within
+     * other closed lines and add that information to the line structures.
+     */
+
+    _max_depth = 0;
+
+    _nclsd = 0;
+    for ( nc = 0; nc < _cntrs.ncntrs; nc++ )  
+	if ( _cntrs.cntr[nc] != NULL_CNF_CNTR  &&
+	   ( _cntrs.cntr[nc]->status == CNF_CLOSED || 
+	     _cntrs.cntr[nc]->status == CNF_HOLE )  &&
+	     _cftype[_cntrs.cntr[nc]->level] <= 0 )
+	    _nclsd += 1;
+
+    G_MALLOC (  _clsd, short, _nclsd,  "_clsd" );
+    G_MALLOC (  _test, short, _nclsd,  "_test" );
+    G_MALLOC ( _inout,   int, _nclsd, "_inout" );
+    G_MALLOC ( _xtest, float, _nclsd, "_xtest" );
+    G_MALLOC ( _ytest, float, _nclsd, "_ytest" );
+
+    ncl = 0;
+    for ( nc = 0; nc < _cntrs.ncntrs; nc++ )  {
+	if ( _cntrs.cntr[nc] != NULL_CNF_CNTR  &&
+	   ( _cntrs.cntr[nc]->status == CNF_CLOSED || 
+	     _cntrs.cntr[nc]->status == CNF_HOLE )  &&
+	     _cftype[_cntrs.cntr[nc]->level] <= 0 )  {
+	    _clsd[ncl] = nc;
+	    ncl += 1;
+	}
+    }
+
+/* printf("_nclsd=%d\n", _nclsd ); */
+    for ( ncl = 0; ncl < _nclsd; ncl++ )  {
+/* printf("_clsd[%d]=%d, npts=%d\n",  */
+/* ncl, _clsd[ncl],  _cntrs.cntr[_clsd[ncl]]->npts ); */
+/* if(ncl==423){ */
+/*     int ii; */
+/*     for(ii=0;ii<_cntrs.cntr[_clsd[ncl]]->npts;ii++) */
+/* 	printf("ii=%d, (%f,%f)\n", ii, _cntrs.cntr[_clsd[ncl]]->x[ii], */
+/* 		_cntrs.cntr[_clsd[ncl]]->y[ii] ); */
+/* } */
+	fill_QInside ( _cntrs.cntr[_clsd[ncl]]->x,
+		      _cntrs.cntr[_clsd[ncl]]->y,
+		      _cntrs.cntr[_clsd[ncl]]->npts, 
+		      _cntrs.cntr[_clsd[ncl]]->range, 
+		      ncl, 
+		      &(_cntrs.cntr[_clsd[ncl]]->ninside), 
+	       	      &(_cntrs.cntr[_clsd[ncl]]->inside) );
+
+    }
+
+}
+
+/*=====================================================================*/
+
+void	fill_QInside ( float *x, float *y, int np, CNF_RANGE rng, 
+			int ncl, int *nin, short **in ){
+/************************************************************************
+ * fill_QInside								*
+ *                                                                      *
+ * This function preps the contents of the global structures.		*
+ * Note that any non-G_NORMAL return is FATAL and contour fill 		*
+ * processing will fail if allowed to continue.				*
+ *                                                                      *
+ * void fill_QInside ( x, y, np, rng, nin, in )				*
+ *                                                                      *
+ * Input parameters:                                                    *
+ *  *x		float		Polygon x-coords			*
+ *  *y		float		Polygon y-coords			*
+ *                                                                      *
+ * Output parameters:                                             	*
+ *  none								*
+ *                                                                      *
+ **                                                                     *
+ * Log:                                                                 *
+ * D.W.Plummer/NCEP	02/04						*
+ ***********************************************************************/
+int	ier;
+int	ntest, nt, nincount;
+short 	*inptr;
+/*---------------------------------------------------------------------*/
+
+	inptr = (short*)NULL;
+
+	/*
+	 * First determine which closed contours to test based on
+	 * the range records.
+	 */
+	ntest = 0;
+	for ( nt = 0; nt < _nclsd; nt++ )  {
+	  if ( ( ncl == IMISSD ) || ( ncl != IMISSD && ncl != nt ) )  {
+	    if ( cnf_range_int(rng,_cntrs.cntr[_clsd[nt]]->range) == G_TRUE )  {
+		_test[ntest] = _clsd[nt];
+		ntest += 1;
+	    }
+	  }
+	}
+
+	/*
+	 * Now, test each against the incoming polygon;
+	 * testing the first point is sufficient.
+	 */
+	*nin = 0;
+	if ( ntest > 0 )  {
+	    for ( nt = 0; nt < ntest; nt++ )  {
+	        _xtest[nt] = _cntrs.cntr[_test[nt]]->x[0];
+	        _ytest[nt] = _cntrs.cntr[_test[nt]]->y[0];
+	    }
+	    cgr_inpoly ( sys_G, &ntest, _xtest, _ytest,
+		         sys_G,    &np,      x,      y, 
+			 _inout, &ier );
+	    for ( nt = 0; nt < ntest; nt++ )  {
+		if ( _inout[nt] == 1 )  {
+		    *nin += 1;
+		}
+	    }
+	    /*
+	     * Allocate memory for each that is in and save depth.
+	     */
+	    if ( *nin > 0 )  {
+		G_MALLOC ( inptr, short, *nin, "ninside" );
+		nincount = 0;
+	        for ( nt = 0; nt < ntest; nt++ )  {
+		    if ( _inout[nt] == 1 )  {
+		        inptr[nincount] = _test[nt];
+		        _cntrs.cntr[_test[nt]]->depth += 1;
+      			_max_depth = G_MAX ( _max_depth, 
+				_cntrs.cntr[_test[nt]]->depth );
+			nincount += 1;
+		    }
+	        }
+	    }
+	}
+
+	/*
+	 * Return a pointer to the array of interior polygons.
+	 */
+	*in = inptr;
+
+}
+
+/*=====================================================================*/
+
+void	fill_CalcRange ( float *x, float *y, int np, CNF_RANGE *rng )
+{
+    int	ii;
+/*---------------------------------------------------------------------*/
+
+    rng->minx =  FLT_MAX;
+    rng->miny =  FLT_MAX;
+    rng->maxx = -FLT_MAX;
+    rng->maxy = -FLT_MAX;
+
+    for ( ii = 0; ii < np; ii++ )  {
+	rng->minx = G_MIN ( rng->minx, x[ii] );
+	rng->miny = G_MIN ( rng->miny, y[ii] );
+	rng->maxx = G_MAX ( rng->maxx, x[ii] );
+	rng->maxy = G_MAX ( rng->maxy, y[ii] );
+    }
+
+}
+
+/*=====================================================================*/
+
+void	fill_Add ( int which, float *x, float *y, int np )
+/************************************************************************
+ * fill_Add								*
+ *                                                                      *
+ * This function adds a set of points to the global (_x,_y) arrays.	*
+ *                                                                      *
+ * void fill_Add ( which, x, y, np )					*
+ *                                                                      *
+ * Input parameters:                                                    *
+ *  which	int		Which type of add - CLOSED or 		*
+ *  				    FORWARD or BACKWARD			*
+ *  *x		float		Polygon x-coords			*
+ *  *y		float		Polygon y-coords			*
+ *  np		int		Number of points			*
+ *                                                                      *
+ * Output parameters:                                             	*
+ *  none								*
+ *                                                                      *
+ **                                                                     *
+ * Log:                                                                 *
+ * D.W.Plummer/NCEP	02/04						*
+ ***********************************************************************/
+{
+int	ii, ii_ptr, nbytes;
+float	dx, dy, dist, mindist;
+float	*x_add, *y_add;
+#define	FILL_SRCH_INCR	10
+/*---------------------------------------------------------------------*/
+
+    if ( _filter > 0.0F )  {
+        fill_Reduce ( np, x, y, &_npts_rduc, _x_rduc, _y_rduc );
+	x_add = _x_rduc; y_add = _y_rduc;
+    }
+    else  {
+	_npts_rduc = np;
+	x_add = x; y_add = y;
+    }
+
+    fill_ChkPts ( _npts_rduc );
+
+    switch ( which )  {
+
+	case	CLOSED:	   /* add a closed contour inside a closed contour */
+
+	    /* Find a reasonably close point */
+	    mindist = FLT_MAX;
+	    for ( ii = 0; ii < _npts; ii+=FILL_SRCH_INCR )  {
+		dx = _x[ii] - x_add[0]; dy = _y[ii] - y_add[0];
+		dist = dx*dx + dy*dy;
+		if ( dist < mindist )  {
+		    ii_ptr = ii;
+		    mindist = dist;
+		}
+	    }
+
+	    /*
+	     * Insert the closed line in the middle at position 'ii_ptr'.
+	     */
+	    nbytes = (_npts-ii_ptr) * sizeof(float);
+	    memmove ( &(_x[ii_ptr+_npts_rduc+1]), &(_x[ii_ptr]), nbytes );
+	    memmove ( &(_y[ii_ptr+_npts_rduc+1]), &(_y[ii_ptr]), nbytes );
+	    nbytes = _npts_rduc * sizeof(float);
+	    memcpy ( &(_x[ii_ptr+1]), x_add, nbytes );
+	    memcpy ( &(_y[ii_ptr+1]), y_add, nbytes );
+	    _npts = _npts + _npts_rduc + 1;
+
+	    break;
+
+	case	FORWARD:        /* add a line in the forward direction */
+
+	    nbytes = _npts_rduc * sizeof(float);
+	    memcpy ( &(_x[_npts]), x_add, nbytes );
+	    memcpy ( &(_y[_npts]), y_add, nbytes );
+	    _npts += _npts_rduc;
+
+	    break;
+
+	default:               /* add a line in the backward direction */
+	
+	    for ( ii = _npts_rduc-1; ii >= 0; ii-- )  {
+		_x[_npts] = x_add[ii];
+		_y[_npts] = y_add[ii];
+		_npts += 1;
+	    }
+
+	    break;
+
+    }
+
+}
+
+/*=====================================================================*/
+
+void	fill_ChkPts ( int np )
+{
+#define	CONNECT_PTS	4
+/*---------------------------------------------------------------------*/
+
+    if ( ( _npts + np + CONNECT_PTS ) > _n_alloc )  {
+	_n_alloc += MAX_FILL_PTS;
+	G_REALLOC ( _x, float, _n_alloc, "CNFFILL_CHKPTS - _x" );
+	G_REALLOC ( _y, float, _n_alloc, "CNFFILL_CHKPTS - _y" );
+	G_REALLOC ( _x_rduc, float, _n_alloc, "CNFFILL_CHKPTS - _x_rduc" );
+	G_REALLOC ( _y_rduc, float, _n_alloc, "CNFFILL_CHKPTS - _y_rduc" );
+printf("CNFFILL_CHKPTS - realloc to %d, _npts %d\n", _n_alloc, _npts );
+    }
+
+}
+
+/*=====================================================================*/
+
+void	fill_Reduce ( int nin, float *xin, float *yin,
+		      int *nout, float *xout, float *yout )
+{
+int	nbytes, ier;
+/*---------------------------------------------------------------------*/
+
+    if ( _filter > 0.0F )  {
+
+	cv_rduc ( &nin, xin, yin, &_filter, nout, xout, yout, &ier );
+	if ( xin[0] == xin[nin-1] && yin[0] == yin[nin-1] )  {
+	    xout[*nout] = xout[0];
+	    yout[*nout] = yout[0];
+	    *nout += 1;
+	}
+
+    }
+    else  {
+
+	nbytes = nin * sizeof(float);
+	memcpy ( xout, xin, nbytes );
+	memcpy ( yout, yin, nbytes );
+	*nout = nin;
+
+    }
+
+}
+
+/*=====================================================================*/
+
+void	fill_InitUsed ( void )
+{
+/*---------------------------------------------------------------------*/
+    _n_fillUsed = 0;
+}
+void	fill_SetUsed ( CNF_CNTR *cntr, int drct )
+{
+/*---------------------------------------------------------------------*/
+    _fillUsed[_n_fillUsed].cntr = cntr;
+    _fillUsed[_n_fillUsed].drct = drct;
+    _n_fillUsed += 1;
+}
+void	fill_AssignUsed ( void )
+{
+int		ii, drct;
+CNF_CNTR	*cntr;
+/*---------------------------------------------------------------------*/
+    for ( ii = 0; ii < _n_fillUsed; ii++ )  {
+	cntr = _fillUsed[ii].cntr;
+	drct = _fillUsed[ii].drct;
+        cntr->used[drct] = G_TRUE;
+    }
+}
+
+/*=====================================================================*/
+

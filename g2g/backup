@@ -1,0 +1,53 @@
+#!/bin/csh
+
+#cp vgtag.h			gempak/source/programs/gui/nmap2
+
+#/* header & common file */
+#DEVCHR.CMN       
+#gemprm.h     
+#GEMPRM.PRM   
+#MCHPRM.PRM  
+#grphgd.cmn    
+#uscore.h
+
+#/* new subroutins for grphgd */
+cp g2gdriver.c		g2gdriver.c.bak
+cp g2gparam.f		g2ginput.f.bak
+cp g2ginit.f 		g2gsetup.f.bak    
+cp g2gcalc.f		g2gcalc.f.bak    
+cp g2gsetdata.f		g2gsetdata.f.bak    
+cp g2gbndcnds.f		g2gbndcnds.f.bak    
+cp g2gfindint.f 	g2gfindint.f.bak	 
+
+#/* utility functions needed for grphgd */
+cp cgrqrol.c  		cgrqrol.c.bak	      
+cp cgrsegdist.c 	cgrsegdist.c.bak
+cp cgrvectxprod.c 	cgrvectxprod.c.bak      
+cp incatmap.c 		incatmap.c.bak	   
+cp indiscrete.c		indiscrete.c.bak	 
+cp indlines.c		indlines.c.bak	  
+cp stldsp.f	stldsp.f.bak	
+cp stnull.f	stnull.f.bak	
+
+#/* legacy subroutines needed for grphgd */
+cp gdline.f	gdline.f.bak	     
+cp glimit.f	glimit.f.bak	        
+cp gdlwei.f	gdlwei.f.bak	     
+cp glvalu.f	glvalu.f.bak	      
+cp gsmoot.f	gsmoot.f.bak	      
+cp lnsgi1.f	lnsgi1.f.bak	    
+cp ggedge.f	ggedge.f.bak	      
+cp ggsort.c	ggsort.c.bak	     
+cp gnextv.f	gnextv.f.bak	      
+cp gsortd.f	gsortd.f.bak	      
+cp lnsgin.f	lnsgin.f.bak	    
+cp gindex.f	gindex.f.bak	     
+cp gradls.f	gradls.f.bak	      
+cp gweigs.f	gweigs.f.bak	      
+cp gbound.f	gbound.f.bak	         
+cp gindx1.f	gindx1.f.bak	     
+cp gciijj.f	gciijj.f.bak	         
+cp gglims.f	gglims.f.bak	      
+cp glastv.f	glastv.f.bak	     
+
+#*******************************************************

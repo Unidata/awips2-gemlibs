@@ -1,0 +1,6 @@
+!	This is the GEMLIB CNF error file
+!
+ -1	! Attempted to save a line with too few points (!AS)
+ -2 	! CNF structures have not been initialized
+ -3 	! Cannot place contour line endpoints in CNF_PREP
+ -4 	! Cannot link edges in CNF_PREP

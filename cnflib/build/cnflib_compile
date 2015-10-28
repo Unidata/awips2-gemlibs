@@ -1,0 +1,13 @@
+#echo $GEMOLB/libcnf.a
+# $RM $GEMOLB/libcnf.a
+$RM libcnf.a
+##################################
+echo "COMPILING CNF (CONTOUR/FILL) LIBRARY."
+# cd $GEMPAK/source/cnflib
+$CC $CFLAGS -c cnf*.c
+# $AR $ARFLAGS $GEMOLB/libcnf.a *.o
+$AR $ARFLAGS libcnf.a *.o
+$RM *.o
+##################################
+echo "COMPILATION OF CNF (CONTOUR/FILL) LIBRARY IS COMPLETE."
+echo =================================================================

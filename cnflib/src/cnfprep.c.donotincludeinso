@@ -1,0 +1,1308 @@
+#include "geminc.h"
+#include "gemprm.h"
+#include "cnf.h"
+#include "gpc.h"
+#include "proto_gpc.h"
+
+/* -------------------------------------------------------------------- */
+
+#define	NO_MATCH	0
+#define	LAST_TO_FIRST	1
+#define	LAST_TO_LAST	2
+#define	FIRST_TO_LAST	3
+#define	FIRST_TO_FIRST	4
+
+#define	HOLE		1
+#define	NOHOLE		0
+
+#define	DELTA(x)	( (x) - (int)(x) )
+
+/* -------------------------------------------------------------------- */
+
+int	prep_CntrSort ( CNF_CNTR **cntr1, CNF_CNTR **cntr2 );
+/* int	prep_LinkEdges (); */
+/* int	prep_ExamineEdgePts (); */
+/* int	prep_LinkCntrs (); */
+/* int	prep_ConnectCntrs (); */
+/* int	prep_AdjEdges ( int type ); */
+void	prep_RevEdge ( int num_edge );
+void	prep_AddPtEdge ( int num_edge );
+void	prep_ShiftEdge ( int num_edge );
+
+void	ExEdgePts_Link ( int ne, CNF_EDGEPT **ept0 );
+void	ExEdgePts_Dupl  ( int ne, CNF_EDGEPT **ept0 );
+void	ExEdgePts_Stub ( int ne, CNF_EDGEPT **ept0 );
+void	ExEdgePts_Ovlp ( int ne, CNF_EDGEPT **ept0 );
+
+/* -------------------------------------------------------------------- */
+
+void cnf_prep ( int *iret )
+/************************************************************************
+ * cnf_prep								*
+ *                                                                      *
+ * This function preps the contents of the global structures.		*
+ * Note that any non-G_NORMAL return is FATAL and contour fill 		*
+ * processing will fail if allowed to continue.				*
+ *                                                                      *
+ * void cnf_prep ( iret )						*
+ *                                                                      *
+ * Input parameters:                                                    *
+ *  none								*
+ *                                                                      *
+ * Output parameters:                                             	*
+ *  *iret	int	Return code					*
+ *			= G_NORMAL - normal				*
+ *			= -3 = cannot place contour line endpoints	*
+ *			= -4 = cannot link edges			*
+ *                                                                      *
+ **                                                                     *
+ * Log:                                                                 *
+ * D.W.Plummer/NCEP	02/04						*
+ ***********************************************************************/
+{
+int	nc, ier;
+/*---------------------------------------------------------------------*/
+
+    *iret = G_NORMAL;
+
+    /*
+     * Sort the contour line arrays using function 'prep_CntrSort'.
+    qsort ( _cntrs.cntr, _cntrs.ncntrs, sizeof( CNF_CNTR* ),
+	    (int(*)(const void*, const void*))prep_CntrSort );
+     */
+
+    /*
+     * Adjust all open edges.
+     */
+/* printf("BEFORE prep_AdjEdges -- CNF_OPEN\n"); */
+    if ( ( *iret = prep_AdjEdges ( CNF_OPEN ) ) != G_NORMAL )  return;
+/* printf("AFTER  prep_AdjEdges -- CNF_OPEN\n"); */
+
+    /*
+     * Link all open edges to form closed edges (all need to be closed).
+     */
+/* printf("BEFORE prep_LinkEdges --\n"); */
+    if ( ( *iret = prep_LinkEdges () ) != G_NORMAL )  return;
+/* printf("AFTER  prep_LinkEdges --\n"); */
+
+    /*
+     * Compute 'depth' of all edges (all are closed) and 'inside' list.
+     */
+
+    /*
+     * Adjust all closed edges.
+     */
+/* printf("BEFORE prep_AdjEdges -- CNF_CLOSED\n"); */
+    if ( ( *iret = prep_AdjEdges ( CNF_CLOSED ) ) != G_NORMAL )  return;
+/* printf("AFTER  prep_AdjEdges -- CNF_CLOSED\n"); */
+
+    /*
+     * Examine all edges and remove duplicate points and
+     * any self-overlaps and stubs.
+     */
+/* printf("BEFORE prep_ExamineEdgePts --\n"); */
+    if ( ( *iret = prep_ExamineEdgePts () ) != G_NORMAL )  return;
+/* printf("AFTER  prep_ExamineEdgePts --\n"); */
+
+    /*
+     * Link all open contours that might connect (at an edgepoint).
+     */
+    if ( ( *iret = prep_LinkCntrs () ) != G_NORMAL )  return;
+/* printf("AFTER prep_LinkCntrs --\n"); */
+
+    /*
+     * Connect all open contours to the edges.
+     */
+    if ( ( *iret = prep_ConnectCntrs () ) != G_NORMAL )  return;
+/* printf("AFTER prep_ConnectCntrs --\n"); */
+
+    /*
+     * Determine each closed contour's level.
+     */
+
+    for ( nc = 0; nc < _cntrs.ncntrs; nc++ )  
+	if ( _cntrs.cntr[nc] != NULL_CNF_CNTR )
+	    cnf_ginx ( &(_cntrs.cntr[nc]->value), 
+		    &(_cntrs.cntr[nc]->level), &ier );
+
+}
+
+/*=====================================================================*/
+
+int	prep_CntrSort ( CNF_CNTR **cntr1, CNF_CNTR **cntr2 )
+/************************************************************************
+ * prep_CntrSort                                                        *
+ *                                                                      *
+ * This function compares the range minimum x-values.			*
+ * If the comparison is equal, minimum y-values are compared.		*
+ *                                                                      *
+ * int prep_CntrSort   ( list1, list2 )                                 *
+ *                                                                      *
+ * Input parameters:                                                    *
+ * *cntr1     	CNF_CNTR      	CNF_CNTR element          		*
+ * *cntr2     	CNF_CNTR      	CNF_CNTR element          		*
+ *                                                                      *
+ * Output parameters:                                                   *
+ *                                                                      *
+ * Return parameters:                                                   *
+ * prep_CntrSort      int         Return code (ala strcmp)            	*
+ *                                                                      *
+ **                                                                     *
+ * Log:                                                                 *
+ * D.W.Plummer/NCEP      4/04                                           *
+ ***********************************************************************/
+{
+int ival;
+/*---------------------------------------------------------------------*/
+
+    ival = cntr1[0]->range.minx - cntr2[0]->range.minx;
+
+    if ( ival != 0 )  return ( ival );
+
+    ival = cntr1[0]->range.miny - cntr2[0]->range.miny;
+
+    return (ival);
+
+}
+
+/*=====================================================================*/
+
+int	prep_LinkEdges ()
+/************************************************************************
+ * prep_LinkEdges                                                       *
+ *                                                                      *
+ * This function compares the range minimum x-values.			*
+ * If the comparison is equal, minimum y-values are compared.		*
+ *                                                                      *
+ * int prep_LinkEdges  ( )                                 		*
+ *                                                                      *
+ * Input parameters:                                                    *
+ *                                                                      *
+ * Output parameters:                                                   *
+ *                                                                      *
+ * Return parameters:                                                   *
+ * prep_LinkEdges      int         Return code (ala strcmp)            	*
+ *                                                                      *
+ **                                                                     *
+ * Log:                                                                 *
+ * D.W.Plummer/NCEP      4/04                                           *
+ ***********************************************************************/
+{
+int		compare;
+int		ne0, ne1, closed;
+CNF_EDGEPT	*ept, *next, *first;
+CNF_POINT	first0, last0, first1;
+
+int ttt=0,ier;
+/*---------------------------------------------------------------------*/
+    /*
+     * For each edge, check the closed flag. If it is not closed, find
+     * another unclosed edge that can link to it's end. 
+     *
+     * IF NOT FOUND, RETURN WITH A FATAL ERROR SINCE ALL EDGES MUST 
+     * CONNECT AND BE CLOSED.
+     *
+     * If found, link to the end. Repeat until the last point equals
+     * the first and set the closed flag. Remember to set all the 'first'
+     * pointers of the linked edges to 'NULL_CNF_EDGEPT'.
+     */
+
+    for ( ne0 = 0; ne0 < _edges.nedges; ne0++ )  {
+
+	/* Skip all closed and NULL edges. */
+	if ( _edges.edge[ne0]->closed == CNF_OPEN  &&
+	     _edges.edge[ne0]->first != NULL_CNF_EDGEPT )  {
+
+	    /*
+   	     * This edge MUST link with another.
+	     */
+/* printf("This edge (%d) MUST link...\n", ne0 );  */
+	    first = _edges.edge[ne0]->first;
+	    ept = first;
+	    first0 = *(ept->pt);
+	    next = ept->next;
+	    while ( next != NULL_CNF_EDGEPT )  {
+		ept = next;
+		next = ept->next;
+	    }
+	    last0 = *(ept->pt);
+
+	    closed = cnf_compare_pt(&first0,&last0);
+/* printf("TRYING TO LINK EDGE ENDPOINT (%5.1f,%5.1f)\n", last0.x, last0.y ); */
+	    ne1 = 0;
+	    while ( closed == G_FALSE && ne1 < _edges.nedges )  {
+
+		/* Skip all closed and NULL edges. */
+	        if ( _edges.edge[ne1]->closed == CNF_OPEN  &&
+		     _edges.edge[ne1]->first != NULL_CNF_EDGEPT  &&
+		     ne1 != ne0 )  {
+
+		    first1 = *(_edges.edge[ne1]->first->pt);
+
+/* printf("\t COMPARE ENDPOINT %d - (%5.1f,%5.1f)", ne1, first1.x, first1.y ); */
+		    compare = NO_MATCH;
+		    if ( cnf_compare_pt(&last0,&first1) == G_TRUE )
+			compare = LAST_TO_FIRST;
+		    if ( compare != NO_MATCH )  {
+/* printf("\t - FOUND!\n" ); */
+			ept->next = _edges.edge[ne1]->first;
+			_edges.edge[ne1]->first->prev = ept;
+			/* Update range record */
+			_edges.edge[ne0]->range.minx = 
+			    G_MIN(_edges.edge[ne0]->range.minx,
+				  _edges.edge[ne1]->range.minx );
+			_edges.edge[ne0]->range.maxx = 
+			    G_MAX(_edges.edge[ne0]->range.maxx,
+				  _edges.edge[ne1]->range.maxx );
+			_edges.edge[ne0]->range.miny = 
+			    G_MIN(_edges.edge[ne0]->range.miny,
+				  _edges.edge[ne1]->range.miny );
+			_edges.edge[ne0]->range.maxy = 
+			    G_MAX(_edges.edge[ne0]->range.maxy,
+				  _edges.edge[ne1]->range.maxy );
+			/* Set edge ne1 to NULL - we don't need it anymore */
+			_edges.edge[ne1]->first = NULL_CNF_EDGEPT;
+	    		while ( ept->next != NULL_CNF_EDGEPT )  ept = ept->next;
+	    		last0 = *(ept->pt);
+/* printf("TRYING TO LINK EDGE ENDPOINT (%5.1f,%5.1f)\n", last0.x, last0.y ); */
+			ne1 = 0;
+		    }
+		    else  {
+/* printf("\n" ); */
+			ne1 += 1;
+		    }
+		}
+		else
+		    ne1 += 1;
+
+		closed = cnf_compare_pt(&first0,&last0);
+/* printf("\t CHECK CLOSED (%f,%f)(%f,%f) - %s\n",  */
+/* first0.x,first0.y,last0.x,last0.y, closed==G_TRUE?"TRUE":"FALSE" ); */
+	    }
+	    if ( closed == G_FALSE )  {
+printf("CANNOT LINK EDGE POINT (%f,%f)\n", last0.x, last0.y );
+cnf_dump(&ttt,&ier);
+		return ( -4 );
+	    }
+	    else  {
+		/* Remove duplicate point */
+		ept->prev->next = first;
+		first->prev = ept->prev;
+		G_FREE ( ept->pt, CNF_POINT );
+		G_FREE ( ept, CNF_EDGEPT );
+		_edges.edge[ne0]->closed = CNF_CLOSED;
+	    }
+	}
+    }
+
+    return ( G_NORMAL );
+
+
+}
+
+/*=====================================================================*/
+
+int	prep_ExamineEdgePts ()
+/************************************************************************
+ * prep_ExamineEdgePts                                                  *
+ *                                                                      *
+ * This function removes all duplicate edge points. These include loop- *
+ * backs and overlaps.							*
+ * If the comparison is equal, minimum y-values are compared.		*
+ *                                                                      *
+ * int prep_ExamineEdgePts  ( )                                 	*
+ *                                                                      *
+ * Input parameters:                                                    *
+ *                                                                      *
+ * Output parameters:                                                   *
+ *                                                                      *
+ * Return parameters:                                                   *
+ * prep_ExamineEdgePts      int         Return code (ala strcmp)        *
+ *                                                                      *
+ **                                                                     *
+ * Log:                                                                 *
+ * D.W.Plummer/NCEP      4/04                                           *
+ ***********************************************************************/
+{
+int		ne0, nactive;
+CNF_EDGEPT	*ept0;
+/*---------------------------------------------------------------------*/
+    /*
+     * All edges should now be closed...
+     *
+     * Check all edge points to see if they are identical with any other edge
+     * points.  If two points are identical, then the
+     * two closed edges must merge into one. Just link the two at the
+     * identical point and set the merged first point to NULL_CNF_EDGEPT.
+     */
+    
+    /*
+     * For each edge, loop over each point and check for
+     * 1) duplicate points with the next point,
+     * 2) stub end point,
+     * 3) self-overlap point.
+     * Then move on to the next point.
+     */
+    nactive = 0;
+    for ( ne0 = 0; ne0 < _edges.nedges; ne0++ )  {
+        if ( _edges.edge[ne0]->first != NULL_CNF_EDGEPT )  nactive += 1;
+    }
+    if ( nactive == 1 )  return ( G_NORMAL );
+
+
+    for ( ne0 = 0; ne0 < _edges.nedges; ne0++ )  {
+        if ( _edges.edge[ne0]->closed == CNF_CLOSED  &&
+	     _edges.edge[ne0]->first != NULL_CNF_EDGEPT )  {
+	    ept0 = _edges.edge[ne0]->first;
+	    do  {
+	        ExEdgePts_Dupl ( ne0, &ept0 );
+	        if ( ept0 != NULL_CNF_EDGEPT )  ept0 = ept0->next;
+	    } while ( _edges.edge[ne0]->first != NULL_CNF_EDGEPT && ept0 != _edges.edge[ne0]->first );
+	}
+    }
+/* printf("ExEdgePts_Dupl DONE...\n"); */
+    for ( ne0 = 0; ne0 < _edges.nedges; ne0++ )  {
+        if ( _edges.edge[ne0]->closed == CNF_CLOSED  &&
+	     _edges.edge[ne0]->first != NULL_CNF_EDGEPT )  {
+	    ept0 = _edges.edge[ne0]->first;
+	    do  {
+		ExEdgePts_Stub ( ne0, &ept0 );
+		if ( ept0 != NULL_CNF_EDGEPT )  ept0 = ept0->next;
+	    } while ( _edges.edge[ne0]->first != NULL_CNF_EDGEPT && ept0 != _edges.edge[ne0]->first );
+	}
+    }
+/* printf("ExEdgePts_Stub DONE...\n"); */
+    for ( ne0 = 0; ne0 < _edges.nedges; ne0++ )  {
+        if ( _edges.edge[ne0]->closed == CNF_CLOSED  &&
+	     _edges.edge[ne0]->first != NULL_CNF_EDGEPT )  {
+	    ept0 = _edges.edge[ne0]->first;
+	    do  {
+		ExEdgePts_Ovlp ( ne0, &ept0 );
+		ept0 = ept0->next;
+	    } while ( ept0 != NULL_CNF_EDGEPT &&
+		      ept0 != _edges.edge[ne0]->first );
+	}
+    }
+/* printf("ExEdgePts_Ovlp DONE...\n"); */
+    for ( ne0 = 0; ne0 < _edges.nedges; ne0++ )  {
+        if ( _edges.edge[ne0]->closed == CNF_CLOSED  &&
+	     _edges.edge[ne0]->first != NULL_CNF_EDGEPT )  {
+	    ept0 = _edges.edge[ne0]->first;
+	    do  {
+	        ExEdgePts_Dupl ( ne0, &ept0 );
+	        ept0 = ept0->next;
+	    } while ( _edges.edge[ne0]->first != NULL_CNF_EDGEPT && ept0 != _edges.edge[ne0]->first );
+	}
+    }
+/* printf("ExEdgePts_Dupl DONE...\n"); */
+    for ( ne0 = 0; ne0 < _edges.nedges; ne0++ )  {
+        if ( _edges.edge[ne0]->closed == CNF_CLOSED  &&
+	     _edges.edge[ne0]->first != NULL_CNF_EDGEPT )  {
+	    ept0 = _edges.edge[ne0]->first;
+	    do  {
+		ExEdgePts_Stub ( ne0, &ept0 );
+		if ( ept0 != NULL_CNF_EDGEPT )  ept0 = ept0->next;
+	    } while ( _edges.edge[ne0]->first != NULL_CNF_EDGEPT && ept0 != _edges.edge[ne0]->first );
+	}
+    }
+/* printf("ExEdgePts_Stub DONE...\n"); */
+    for ( ne0 = 0; ne0 < _edges.nedges; ne0++ )  {
+        if ( _edges.edge[ne0]->closed == CNF_CLOSED  &&
+	     _edges.edge[ne0]->first != NULL_CNF_EDGEPT )  {
+	    ept0 = _edges.edge[ne0]->first;
+	    do  {
+		ExEdgePts_Link ( ne0, &ept0 );
+		ept0 = ept0->next;
+	    } while ( ept0 != _edges.edge[ne0]->first );
+	}
+    }
+/* printf("ExEdgePts_Link DONE...\n"); */
+    for ( ne0 = 0; ne0 < _edges.nedges; ne0++ )  {
+        if ( _edges.edge[ne0]->closed == CNF_CLOSED  &&
+	     _edges.edge[ne0]->first != NULL_CNF_EDGEPT )  {
+	    ept0 = _edges.edge[ne0]->first;
+	    do  {
+	        ExEdgePts_Dupl ( ne0, &ept0 );
+	        if ( ept0 != NULL_CNF_EDGEPT )  ept0 = ept0->next;
+	    } while ( _edges.edge[ne0]->first != NULL_CNF_EDGEPT && ept0 != _edges.edge[ne0]->first );
+	}
+    }
+/* printf("ExEdgePts_Dupl DONE...\n"); */
+    for ( ne0 = 0; ne0 < _edges.nedges; ne0++ )  {
+        if ( _edges.edge[ne0]->closed == CNF_CLOSED  &&
+	     _edges.edge[ne0]->first != NULL_CNF_EDGEPT )  {
+	    ept0 = _edges.edge[ne0]->first;
+	    do  {
+		ExEdgePts_Stub ( ne0, &ept0 );
+		if ( ept0 != NULL_CNF_EDGEPT )  ept0 = ept0->next;
+	    } while ( _edges.edge[ne0]->first != NULL_CNF_EDGEPT && ept0 != _edges.edge[ne0]->first );
+	}
+    }
+/* printf("ExEdgePts_Stub DONE...\n"); */
+    for ( ne0 = 0; ne0 < _edges.nedges; ne0++ )  {
+        if ( _edges.edge[ne0]->closed == CNF_CLOSED  &&
+	     _edges.edge[ne0]->first != NULL_CNF_EDGEPT )  {
+	    ept0 = _edges.edge[ne0]->first;
+	    do  {
+		ExEdgePts_Ovlp ( ne0, &ept0 );
+		ept0 = ept0->next;
+	    } while ( ept0 != _edges.edge[ne0]->first );
+	}
+    }
+/* printf("ExEdgePts_Ovlp DONE...\n"); */
+    for ( ne0 = 0; ne0 < _edges.nedges; ne0++ )  {
+        if ( _edges.edge[ne0]->closed == CNF_CLOSED  &&
+	     _edges.edge[ne0]->first != NULL_CNF_EDGEPT )  {
+	    ept0 = _edges.edge[ne0]->first;
+	    do  {
+		ExEdgePts_Stub ( ne0, &ept0 );
+		if ( ept0 != NULL_CNF_EDGEPT )  ept0 = ept0->next;
+	    } while ( _edges.edge[ne0]->first != NULL_CNF_EDGEPT && ept0 != _edges.edge[ne0]->first );
+	}
+    }
+/* printf("ExEdgePts_Stub DONE...\n"); */
+
+
+    return ( G_NORMAL );
+
+}
+
+/*=====================================================================*/
+
+int	prep_LinkCntrs ()
+/************************************************************************
+ * prep_LinkCntrs                                                      *
+ *                                                                      *
+ * This function compares the range minimum x-values.			*
+ * If the comparison is equal, minimum y-values are compared.		*
+ *                                                                      *
+ * int prep_LinkCntrs  ( )                                 		*
+ *                                                                      *
+ * Input parameters:                                                    *
+ *                                                                      *
+ * Output parameters:                                                   *
+ *                                                                      *
+ * Return parameters:                                                   *
+ * prep_LinkCntrs      int         Return code (ala strcmp)            *
+ *                                                                      *
+ **                                                                     *
+ * Log:                                                                 *
+ * D.W.Plummer/NCEP      4/04                                           *
+ ***********************************************************************/
+{
+int		np0, np1, ier;
+int		ii, nc0, nc1, ncntrs, compare, total_pts, type, tnp;
+float		value;
+float		*x, *y;
+CNF_POINT	first0, last0, first1, last1;
+/*---------------------------------------------------------------------*/
+
+    /*
+     * For each open contour, check to see if either of it's endpoints
+     * match another open contour's endpoint. If so, create a new line 
+     * with the combined points. Remember to set the previous lines'
+     * 'used' flags to G_TRUE.
+     */
+    for ( nc0 = 0; nc0 < _cntrs.ncntrs; nc0++ )  {
+
+	/* Examine only CNF_OPEN and unused contours. */
+	if ( _cntrs.cntr[nc0] != NULL_CNF_CNTR  &&
+	     _cntrs.cntr[nc0]->status == CNF_OPEN  &&
+	     _cntrs.cntr[nc0]->used[0] == G_FALSE  &&
+	     _cntrs.cntr[nc0]->used[1] == G_FALSE )  {
+
+	    np0 = _cntrs.cntr[nc0]->npts;
+	    first0.x = _cntrs.cntr[nc0]->x[0];
+	    first0.y = _cntrs.cntr[nc0]->y[0];
+	    last0.x  = _cntrs.cntr[nc0]->x[np0-1];
+	    last0.y  = _cntrs.cntr[nc0]->y[np0-1];
+
+	    ncntrs = _cntrs.ncntrs;
+    	    for ( nc1 = nc0+1; nc1 < ncntrs; nc1++ )  {
+
+		/* Compare only CNF_OPEN and unused contours. */
+		if ( _cntrs.cntr[nc1] != NULL_CNF_CNTR  &&
+		     _cntrs.cntr[nc1]->status == CNF_OPEN  && 
+		     _cntrs.cntr[nc1]->used[0] == G_FALSE  &&
+		     _cntrs.cntr[nc1]->used[1] == G_FALSE )  {
+
+	    	    np1 = _cntrs.cntr[nc1]->npts;
+	    	    first1.x = _cntrs.cntr[nc1]->x[0];
+	    	    first1.y = _cntrs.cntr[nc1]->y[0];
+	    	    last1.x  = _cntrs.cntr[nc1]->x[np1-1];
+	    	    last1.y  = _cntrs.cntr[nc1]->y[np1-1];
+
+		    /* Compare all first and last point combinations. */
+		    compare = NO_MATCH;
+		    if ( cnf_compare_pt(&last0,&first1) == G_TRUE )
+			compare = LAST_TO_FIRST;
+		    else if ( cnf_compare_pt(&last0,&last1) == G_TRUE )
+			compare = LAST_TO_LAST;
+		    else if ( cnf_compare_pt(&first0,&last1) == G_TRUE )
+			compare = FIRST_TO_LAST;
+		    else if ( cnf_compare_pt(&first0,&first1) == G_TRUE )
+			compare = FIRST_TO_FIRST;
+		    if ( compare != NO_MATCH )  {
+			total_pts = np0 + np1;
+			G_MALLOC ( x, float, total_pts, "Line link (x)" );
+			G_MALLOC ( y, float, total_pts, "Line link (y)" );
+		        switch ( compare )  {
+			    case	LAST_TO_FIRST:
+			    case	LAST_TO_LAST:
+				tnp = 0;
+				for ( ii = 0; ii < np0; ii++ )  {
+			            x[tnp] = _cntrs.cntr[nc0]->x[ii];
+			            y[tnp] = _cntrs.cntr[nc0]->y[ii];
+			            tnp += 1;
+				}
+				if ( compare == LAST_TO_FIRST )  {
+			    	    for ( ii = 0; ii < np1; ii++ )  {
+				        x[tnp] = _cntrs.cntr[nc1]->x[ii];
+				        y[tnp] = _cntrs.cntr[nc1]->y[ii];
+				        tnp += 1;
+			    	    }
+				}
+				else if ( compare == LAST_TO_LAST )  {
+			    	    for ( ii = np1-1; ii >= 0; ii-- )  {
+				        x[tnp] = _cntrs.cntr[nc1]->x[ii];
+				        y[tnp] = _cntrs.cntr[nc1]->y[ii];
+				        tnp += 1;
+			            }
+				}
+			        break;
+			    case	FIRST_TO_LAST:
+			    case	FIRST_TO_FIRST:
+				tnp = 0;
+				if ( compare == FIRST_TO_LAST )  {
+				    for ( ii = 0; ii < np1; ii++ )  {
+			                x[tnp] = _cntrs.cntr[nc1]->x[ii];
+			                y[tnp] = _cntrs.cntr[nc1]->y[ii];
+			                tnp += 1;
+				    }
+				}
+				else if ( compare == FIRST_TO_FIRST )  {
+			    	    for ( ii = np1-1; ii >= 0; ii-- )  {
+				        x[tnp] = _cntrs.cntr[nc1]->x[ii];
+				        y[tnp] = _cntrs.cntr[nc1]->y[ii];
+				        tnp += 1;
+			            }
+				}
+				for ( ii = 0; ii < np0; ii++ )  {
+			            x[tnp] = _cntrs.cntr[nc0]->x[ii];
+			            y[tnp] = _cntrs.cntr[nc0]->y[ii];
+			            tnp += 1;
+				}
+			        break;
+		    	}
+			type = CNF_CNTR_TYPE;
+			value = _cntrs.cntr[nc0]->value;
+			cnf_lnsv ( &type, &tnp, x, y, &value, &ier );
+/* printf("LINKED CNTR %d with CNTR %d\n", nc0, nc1 ); */
+			G_FREE ( y, float );
+			G_FREE ( x, float );
+			G_FREE ( _cntrs.cntr[nc0]->x, float );
+			G_FREE ( _cntrs.cntr[nc0]->y, float );
+			G_FREE ( _cntrs.cntr[nc0]->inside, short );
+			G_FREE ( _cntrs.cntr[nc0], CNF_CNTR );
+			G_FREE ( _cntrs.cntr[nc1]->x, float );
+			G_FREE ( _cntrs.cntr[nc1]->y, float );
+			G_FREE ( _cntrs.cntr[nc1]->inside, short );
+			G_FREE ( _cntrs.cntr[nc1], CNF_CNTR );
+			/* 
+			 * Found a match, go on to the next line.
+			 * Don't worry about finding another match; that
+			 * will be found later in the loop since 'nc0' 
+			 * continues until the current value of ncntrs.
+			 */
+			break;
+		    }
+		}
+	    }
+	}
+    }
+
+    return ( G_NORMAL );
+
+}
+
+/*=====================================================================*/
+
+int	prep_ConnectCntrs ()
+/************************************************************************
+ * prep_ConnectCntrs                                                    *
+ *                                                                      *
+ * This function connects open contours to the edges.			*
+ *                                                                      *
+ * int prep_ConnectCntrs  ( )                                 		*
+ *                                                                      *
+ * Input parameters:                                                    *
+ * none									*
+ *                                                                      *
+ * Output parameters:                                                   *
+ * none									*
+ *                                                                      *
+ * Return parameters:                                                   *
+ * prep_ConnectCntrs      int         Return code			*
+ *                                                                      *
+ **                                                                     *
+ * Log:                                                                 *
+ * D.W.Plummer/NCEP      4/04                                           *
+ ***********************************************************************/
+{
+int		nc, ne, nptsm1, done;
+int		insert_pt0, insert_ptN, pt0_done, ptN_done;
+float		tx0, ty0, txN, tyN;
+float		dtx0, dty0, dtxN, dtyN;
+CNF_EDGEPT	*ept, *next, *insert;
+/*---------------------------------------------------------------------*/
+
+    /*
+     * For each open contour, determine where it's endpoints meet an edge.
+     * Add those edge points to the edge line, along with the proper
+     * information, such as pointers, etc.
+     */
+/* int ttt=1,ier; */
+/* cnf_dump(&ttt,&ier); */
+    for ( nc = 0; nc < _cntrs.ncntrs; nc++ )  {
+
+/* if(nc==41)printf("Line %d - \n", nc ); */
+	if ( _cntrs.cntr[nc] != NULL_CNF_CNTR  &&
+	     _cntrs.cntr[nc]->status == CNF_OPEN  &&
+	     _cntrs.cntr[nc]->used[0] == G_FALSE  &&
+	     _cntrs.cntr[nc]->used[1] == G_FALSE )  {
+
+	    nptsm1 = _cntrs.cntr[nc]->npts-1;
+
+	    tx0 = _cntrs.cntr[nc]->x[0];
+	    ty0 = _cntrs.cntr[nc]->y[0];
+	    txN = _cntrs.cntr[nc]->x[nptsm1];
+	    tyN = _cntrs.cntr[nc]->y[nptsm1];
+/* if(nc==41)printf("Line %d - (%.1f,%.1f)-(%.1f,%.1f)\n", nc,tx0, ty0, txN, tyN ); */
+
+	    ne = 0;
+	    done = G_FALSE;
+	    insert_pt0 = G_FALSE;
+	    insert_ptN = G_FALSE;
+	    pt0_done = G_FALSE;
+	    ptN_done = G_FALSE;
+/* int npe; */
+	    while ( ne < _edges.nedges && done == G_FALSE )  {
+	        if ( _edges.edge[ne]->first != NULL_CNF_EDGEPT )  {
+		    ept = _edges.edge[ne]->first;
+/* npe = 0; */
+		    do {
+		        next = ept->next;
+/* printf("Compare t0(%f,%f),tN(%f,%f) w/ (%f,%f)-(%f,%f)\n", tx0,ty0,txN,tyN, */
+/* ept->pt->x, ept->pt->y, next->pt->x, next->pt->y ); */
+			if ( pt0_done == G_FALSE )  {
+		        if ( G_DIFF(tx0,ept->pt->x) && G_DIFF(ept->pt->x,next->pt->x) ) {
+			    if ( ( ty0 >= ept->pt->y && ty0 < next->pt->y ) ||
+			         ( ty0 <= ept->pt->y && ty0 > next->pt->y ) )  {
+			        insert_pt0 = G_TRUE;
+				dtx0 = 0.0F;
+				dty0 = G_ABS(ty0 - ept->pt->y);
+			    }
+		        }
+		        else if ( G_DIFF(ty0,ept->pt->y) && G_DIFF(ept->pt->y,next->pt->y) ) {
+			    if ( ( tx0 >= ept->pt->x && tx0 < next->pt->x ) ||
+			         ( tx0 <= ept->pt->x && tx0 > next->pt->x ) )  {
+			        insert_pt0 = G_TRUE;
+				dtx0 = G_ABS(tx0 - ept->pt->x);
+				dty0 = 0.0F;
+			    }
+		        }
+		        }
+/* 			if ( ptN_done == G_FALSE && insert_pt0 == G_FALSE )  { */
+			if ( ptN_done == G_FALSE )  {
+		        if ( G_DIFF(txN,ept->pt->x) && G_DIFF(ept->pt->x,next->pt->x) ) {
+			    if ( ( tyN >= ept->pt->y && tyN < next->pt->y ) ||
+			         ( tyN <= ept->pt->y && tyN > next->pt->y ) )  {
+			        insert_ptN = G_TRUE;
+				dtxN = 0.0F;
+				dtyN = G_ABS(tyN - ept->pt->y);
+			    }
+		        }
+		        else if ( G_DIFF(tyN,ept->pt->y) && G_DIFF(ept->pt->y,next->pt->y) ) {
+			    if ( ( txN >= ept->pt->x && txN < next->pt->x ) ||
+			         ( txN <= ept->pt->x && txN > next->pt->x ) )  {
+			        insert_ptN = G_TRUE;
+				dtxN = G_ABS(txN - ept->pt->x);
+				dtyN = 0.0F;
+			    }
+		        }
+		        }
+			if ( insert_pt0 == G_TRUE && insert_ptN == G_TRUE )  {
+/* printf("WE HAVE A SITUATION.... %f %f %f %f\n", dtx0, dty0, dtxN, dtyN ); */
+			    if ( G_DIFF(dtx0,0.0F) && G_DIFF(dtxN,0.0F) )  {
+				if ( dty0 < dtyN )  
+				    insert_ptN = G_FALSE;
+				else
+				    insert_pt0 = G_FALSE;
+			    }
+			    if ( G_DIFF(dty0,0.0F) && G_DIFF(dtyN,0.0F) )  {
+				if ( dtx0 < dtxN )  
+				    insert_ptN = G_FALSE;
+				else
+				    insert_pt0 = G_FALSE;
+			    }
+/* printf("WE HAVE A SITUATION.... %f %f %f %f\n", ept->pt->x, ept->pt->y, next->pt->x, next->pt->y ); */
+/* printf("WE HAVE A SITUATION.... %f %f %f %f\n", tx0, ty0, txN, tyN ); */
+/* printf("WE HAVE A SITUATION.... %s %s \n", insert_pt0==G_TRUE?"TRUE":"FALSE", insert_ptN==G_TRUE?"TRUE":"FALSE" ); */
+			}
+			if ( insert_pt0 == G_TRUE || insert_ptN == G_TRUE )  {
+			  if ( insert_pt0 == G_TRUE )
+			    insert = cnf_new_edge_pt ( tx0, ty0 );
+			  if ( insert_ptN == G_TRUE )
+			    insert = cnf_new_edge_pt ( txN, tyN );
+			  insert->next = ept->next;
+			  insert->prev = ept;
+			  ept->next = insert;
+			  ept->next->prev = insert;
+			  if ( insert_pt0 == G_TRUE )  {
+/* printf("INSERT 0 (%f,%f) from CNTR %d onto EDGE %d at %d (%f,%f)-(%f,%f)\n", */
+/* tx0,ty0,nc,ne,npe,ept->pt->x,ept->pt->y,next->pt->x,next->pt->y); */
+				_cntrs.cntr[nc]->first = insert;
+			        _cntrs.cntr[nc]->first->drct = CNF_CNTR_START;
+				insert->cntr = _cntrs.cntr[nc];
+				pt0_done = G_TRUE;
+				insert_pt0 = G_FALSE;
+			  }
+			  else if ( insert_ptN == G_TRUE )  {
+/* printf("INSERT N (%f,%f) from CNTR %d onto EDGE %d at %d (%f,%f)-(%f,%f)\n", */
+/* txN,tyN,nc,ne,npe,ept->pt->x,ept->pt->y,next->pt->x,next->pt->y); */
+				_cntrs.cntr[nc]->last = insert;
+			        _cntrs.cntr[nc]->last->drct = CNF_CNTR_END;
+				insert->cntr = _cntrs.cntr[nc];
+				ptN_done = G_TRUE;
+				insert_ptN = G_FALSE;
+			  }
+/* npe += 1; */
+			}
+			if ( pt0_done == G_TRUE && ptN_done == G_TRUE )
+			    done = G_TRUE;
+		        ept = ept->next;
+/* npe += 1; */
+		    } while ( ept != _edges.edge[ne]->first && done == G_FALSE );
+		}
+	        ne += 1;
+	    }
+		if ( pt0_done == G_FALSE && ptN_done == G_FALSE )  {
+printf("UNABLE to MATCH EITHER ENDPOINT 0 (%f,%f) or N (%f,%f) from line %d\n", tx0, ty0, txN, tyN, nc );
+		    return ( -3 );
+		}
+		if ( pt0_done == G_FALSE )  {
+/* printf("POSSIBLY UNABLE to MATCH ENDPOINT 0 (%f,%f) from line %d\n", txN, tyN, nc ); */
+		    if ( _cntrs.cntr[nc]->npts != 2 )  {
+printf("UNABLE to MATCH ENDPOINT 0 (%f,%f) from line %d (%f)\n", tx0, ty0, nc, _cntrs.cntr[nc]->value );
+		    }
+		    else  {
+/* printf("CLOSING line %d\n", nc ); */
+			ept = _cntrs.cntr[nc]->last;
+			ept->drct = IMISSD;
+			ept->cntr = NULL_CNF_CNTR;
+			_cntrs.cntr[nc]->last = NULL_CNF_EDGEPT;
+			_cntrs.cntr[nc]->status = CNF_CLOSED;
+			pt0_done = G_TRUE;
+		    }
+		}
+		if ( ptN_done == G_FALSE )  {
+/* printf("POSSIBLY UNABLE to MATCH ENDPOINT N (%f,%f) from line %d\n", txN, tyN, nc ); */
+		    if ( _cntrs.cntr[nc]->npts != 2 )  {
+printf("UNABLE to MATCH ENDPOINT N (%f,%f) from line %d (%f)\n", txN, tyN, nc, _cntrs.cntr[nc]->value );
+		    }
+		    else  {
+/* printf("CLOSING line %d\n", nc ); */
+			ept = _cntrs.cntr[nc]->first;
+			ept->drct = IMISSD;
+			ept->cntr = NULL_CNF_CNTR;
+			_cntrs.cntr[nc]->first = NULL_CNF_EDGEPT;
+			_cntrs.cntr[nc]->status = CNF_CLOSED;
+			ptN_done = G_TRUE;
+		    }
+		}
+		if ( pt0_done == G_FALSE || ptN_done == G_FALSE )  {
+		    return ( -3 );
+		}
+	}
+    }
+
+    return ( G_NORMAL );
+
+}
+
+/*=====================================================================*/
+
+void	ExEdgePts_Link ( int ne, CNF_EDGEPT **ept0 )
+{
+int	ne1;
+CNF_EDGEPT	*ept1, *next0, *next1;
+CNF_POINT	pt0, pt1;
+/*---------------------------------------------------------------------*/
+    pt0.x = (*ept0)->pt->x; pt0.y = (*ept0)->pt->y;
+    for ( ne1 = ne+1; ne1 < _edges.nedges; ne1++ )  {
+	if ( _edges.edge[ne1]->closed == CNF_CLOSED  &&
+	     _edges.edge[ne1]->first != NULL_CNF_EDGEPT )  {
+/* printf("\t\tEDGE %d ....\n", ne1 ); */
+	    ept1 = _edges.edge[ne1]->first;
+	    do {
+	        pt1.x = ept1->pt->x; pt1.y = ept1->pt->y;
+		if ( cnf_compare_pt(&pt0,&pt1) == G_TRUE )  {
+		  next0 = (*ept0)->next;
+		  next1 = ept1->next;
+		  (*ept0)->next = next1;
+		  ept1->next = next0;
+		  next0->prev = ept1;
+		  next1->prev = (*ept0);
+		  _edges.edge[ne1]->first = NULL_CNF_EDGEPT;
+/* printf("\t\tEDGE %d linked w/ EDGE %d at (%5.2f,%5.2f)\n",  */
+/* ne1, ne, pt1.x, pt1.y ); */
+/* int ttt=0,ier; */
+/* cnf_dump(&ttt,&ier); */
+		    return;
+	        }
+		else  {
+	          ept1 = ept1->next;
+		}
+	    } while ( ept1 != _edges.edge[ne1]->first &&
+		      _edges.edge[ne1]->first != NULL_CNF_EDGEPT );
+	}
+    }
+}
+
+/*=====================================================================*/
+
+void	ExEdgePts_Dupl ( int ne, CNF_EDGEPT **ept0 )
+{
+CNF_EDGEPT	*next0, *start;
+CNF_POINT	pt0, pt0_next;
+/*---------------------------------------------------------------------*/
+    start = *ept0;
+    pt0 = *((*ept0)->pt);
+
+    next0 = (*ept0)->next;
+    pt0_next = *(next0->pt);
+/* printf("   DUP CHK      (%3.0f,%3.0f)-(%3.0f,%3.0f)-(%3.0f,%3.0f)\n",  */
+/* (*ept0)->pt->x, (*ept0)->pt->y, */
+/* next0->pt->x, next0->pt->y, */
+/* next0->next->pt->x, next0->next->pt->y ); */
+
+    while ( cnf_compare_pt(&pt0,&pt0_next) == G_TRUE &&
+	    (*ept0) != next0 )  {
+	(*ept0)->next = next0->next;
+	next0->next->prev = (*ept0);
+/* printf("   Remove duplicate (%3.0f,%3.0f)\n", next0->pt->x, next0->pt->y ); */
+	if ( next0 == _edges.edge[ne]->first ) 
+	    _edges.edge[ne]->first = *ept0;
+	G_FREE ( next0->pt, CNF_POINT );
+	G_FREE ( next0, CNF_EDGEPT );
+	next0 = (*ept0)->next;
+	pt0_next = *(next0->pt);
+/* printf("   DUP CHK      (%3.0f,%3.0f)-(%3.0f,%3.0f)-(%3.0f,%3.0f)\n",  */
+/* (*ept0)->pt->x, (*ept0)->pt->y, */
+/* next0->pt->x, next0->pt->y, */
+/* next0->next->pt->x, next0->next->pt->y ); */
+    }
+    if ( (*ept0) == next0 )  {
+	/* Only one point left - omit the line. */
+	G_FREE ( (*ept0)->pt, CNF_POINT );
+	G_FREE ( (*ept0), CNF_EDGEPT );
+	_edges.edge[ne]->first = NULL_CNF_EDGEPT;
+    }
+}
+
+/*=====================================================================*/
+
+void	ExEdgePts_Stub ( int ne, CNF_EDGEPT **ept0 )
+{
+CNF_EDGEPT	*next0, *prev0;
+CNF_POINT	pt0_next, pt0_prev;
+/*---------------------------------------------------------------------*/
+    next0 = (*ept0)->next;
+    prev0 = (*ept0)->prev;
+/*     if ( next0 == NULL_CNF_EDGEPT || prev0 == NULL_CNF_EDGEPT )  return; */
+/*     if ( next0->pt == NULL_CNF_POINT || prev0->pt == NULL_CNF_POINT )  return; */
+    pt0_next = *(next0->pt);
+    pt0_prev = *(prev0->pt);
+/* printf("      STB CHK      (%3.0f,%3.0f)-(%3.0f,%3.0f)-(%3.0f,%3.0f)\n", */
+/* prev0->pt->x, prev0->pt->y, */
+/* (*ept0)->pt->x, (*ept0)->pt->y, */
+/* next0->pt->x, next0->pt->y ); */
+/* printf("COMPARE (%4.1f,%4.1f)w/(%4.1f,%4.1f) - %s\n", */
+/* pt0_prev.x,pt0_prev.y,pt0_next.x,pt0_next.y,cnf_compare_pt(&pt0_prev,&pt0_next)==G_TRUE?"TRUE":"FALSE"); */
+    while ( cnf_compare_pt(&pt0_prev,&pt0_next) == G_TRUE &&
+	    prev0 != next0 )  {
+	prev0->prev->next = next0;
+	next0->prev = prev0->prev;
+	if ( (*ept0) == _edges.edge[ne]->first )
+	    _edges.edge[ne]->first = next0;
+/* printf("      rm stub ept0  (%.1f,%.1f)-(%.1f,%.1f)-(%.1f,%.1f)\n", prev0->pt->x, prev0->pt->y, (*ept0)->pt->x, (*ept0)->pt->y, next0->pt->x, next0->pt->y ); */
+	G_FREE ( (*ept0)->pt, CNF_POINT );
+	G_FREE ( (*ept0), CNF_EDGEPT );
+	if ( prev0 != next0 )  {
+	    if ( prev0 == _edges.edge[ne]->first )
+	        _edges.edge[ne]->first = next0;
+/* printf("      rm stub prev0 (%.1f,%.1f)\n", prev0->pt->x, prev0->pt->y ); */
+	    G_FREE ( prev0->pt, CNF_POINT );
+	    G_FREE ( prev0, CNF_EDGEPT );
+	    (*ept0)  = next0;
+	    next0 = (*ept0)->next;
+	    prev0 = (*ept0)->prev;
+	    pt0_next = *(next0->pt);
+	    pt0_prev = *(prev0->pt);
+	}
+	else  {
+/* printf("      rm stub prev0 (%.1f,%.1f)\nNULL_CNF_EDGEPT\n", prev0->pt->x, prev0->pt->y ); */
+	    G_FREE ( prev0->pt, CNF_POINT );
+	    G_FREE ( prev0, CNF_EDGEPT );
+	    _edges.edge[ne]->first = NULL_CNF_EDGEPT;
+	    (*ept0) = NULL_CNF_EDGEPT;
+	}
+/* printf("COMPARE (%4.1f,%4.1f)w/(%4.1f,%4.1f) - %s\n", */
+/* pt0_prev.x,pt0_prev.y,pt0_next.x,pt0_next.y,cnf_compare_pt(&pt0_prev,&pt0_next)==G_TRUE?"TRUE":"FALSE"); */
+    }
+    if ( prev0 == next0 )  {
+	/*  This is a two-point closed edge - omit it.  */
+/* 	printf("This is a two-point closed edge - omit it.\n"); */
+/* printf("      (%.1f,%.1f)-(%.1f,%.1f)-(%.1f,%.1f)\n", prev0->pt->x, prev0->pt->y, (*ept0)->pt->x, (*ept0)->pt->y, next0->pt->x, next0->pt->y ); */
+	G_FREE ( (*ept0)->pt, CNF_POINT );
+	G_FREE ( (*ept0), CNF_EDGEPT );
+	if ( prev0 != NULL_CNF_EDGEPT )  {
+	    G_FREE ( prev0->pt, CNF_POINT );
+	    G_FREE ( prev0, CNF_EDGEPT );
+	}
+	_edges.edge[ne]->first = NULL_CNF_EDGEPT;
+	(*ept0) = NULL_CNF_EDGEPT;
+/* 	printf("OMITTED.\n"); */
+    }
+}
+
+/*=====================================================================*/
+
+void	ExEdgePts_Ovlp ( int ne, CNF_EDGEPT **ept0 )
+{
+CNF_EDGEPT	*ept1, *next0, *next1;
+CNF_POINT	pt0, pt0_next, pt1, pt1_next;
+/*---------------------------------------------------------------------*/
+    ept1 = (*ept0)->next;
+    do  {
+	next0 = (*ept0)->next;
+	pt0 = *((*ept0)->pt);
+	pt0_next = *(next0->pt);
+	next1 = ept1->next;
+	pt1      = *(ept1->pt);
+	pt1_next = *(next1->pt);
+	if ( cnf_compare_pt(&pt0,&pt1_next) == G_TRUE &&
+	     cnf_compare_pt(&pt0_next,&pt1) == G_TRUE )  {
+
+	    if ( next0 != ept1 && next1 != (*ept0) )  {
+
+		if ( next1 == _edges.edge[ne]->first ||
+		     next0 == _edges.edge[ne]->first )
+		  _edges.edge[ne]->first = (*ept0)->prev;
+/* printf("OVERLAP BREAK at (%4.1f,%4.1f)-(%4.1f,%4.1f)&(%4.1f,%4.1f)-(%4.1f,%4.1f)\n", */
+/* pt0.x,pt0.y,pt0_next.x,pt0_next.y,pt1.x,pt1.y,pt1_next.x,pt1_next.y); */
+
+		(*ept0)->next = next1->next;
+		next1->next->prev = (*ept0);
+		G_FREE ( next1->pt, CNF_POINT );
+		G_FREE ( next1, CNF_EDGEPT );
+
+		ept1->next = next0->next;
+		next0->next->prev = ept1;
+		G_FREE ( next0->pt, CNF_POINT );
+		G_FREE ( next0, CNF_EDGEPT );
+
+		G_MALLOC ( _edges.edge[_edges.nedges], 
+				 CNF_EDGE, 1, "CNF_EDGE" );
+		_edges.edge[_edges.nedges]->first = ept1;
+		ept1->cntr = NULL_CNF_CNTR;
+		ept1->drct = IMISSD;
+		_edges.edge[_edges.nedges]->closed = CNF_CLOSED;
+		_edges.nedges += 1;
+
+		ept1 = (*ept0);
+	    }
+	}
+	ept1 = ept1->next;
+    } while ( ept1 != *ept0 );
+}
+
+/*=====================================================================*/
+
+int	prep_AdjEdges ( int type )
+/************************************************************************
+ * prep_AdjEdges                                                    	*
+ *                                                                      *
+ * This function adjusts the edge points for a given type (CNF_CLOSED	*
+ * or CNF_OPEN).							*
+ *                                                                      *
+ * int prep_AdjEdges  ( )                                 		*
+ *                                                                      *
+ * Input parameters:                                                    *
+ * type	int		Which type of edge to process			*
+ *                                                                      *
+ * Output parameters:                                                   *
+ * none									*
+ *                                                                      *
+ **                                                                     *
+ * Log:                                                                 *
+ * D.W.Plummer/NCEP      4/04                                           *
+ ***********************************************************************/
+{
+int	ne;
+float	delta_x, delta_y;
+float	minx, maxx, miny, maxy;
+CNF_EDGEPT	*ept;
+/*---------------------------------------------------------------------*/
+    
+    if ( type == CNF_OPEN )  {
+
+/* printf("OPEN compute range ... "); */
+	minx =  FLT_MAX;
+	maxx = -FLT_MAX;
+	miny =  FLT_MAX;
+	maxy = -FLT_MAX;
+        for ( ne = 0; ne < _edges.nedges; ne++ )  {
+            if ( _edges.edge[ne]->first != NULL_CNF_EDGEPT &&
+		 _edges.edge[ne]->closed == CNF_OPEN )  {
+/* printf("."); */
+	        ept = _edges.edge[ne]->first;
+		do  {
+		    minx = G_MIN ( minx,ept->pt->x );
+		    maxx = G_MAX ( maxx,ept->pt->x );
+		    miny = G_MIN ( miny,ept->pt->y );
+		    maxy = G_MAX ( maxy,ept->pt->y );
+		    ept = ept->next;
+		} while ( ept != NULL_CNF_EDGEPT );
+	    }
+	}
+	minx = (float) G_NINT ( minx );
+	maxx = (float) G_NINT ( maxx );
+	miny = (float) G_NINT ( miny );
+	maxy = (float) G_NINT ( maxy );
+/* printf("(%f,%f)-(%f,%f)\n",minx,miny,maxx,maxy); */
+
+        for ( ne = 0; ne < _edges.nedges; ne++ )  {
+
+            if ( _edges.edge[ne]->first != NULL_CNF_EDGEPT &&
+		 _edges.edge[ne]->closed == CNF_OPEN )  {
+
+	        ept = _edges.edge[ne]->first;
+/* printf("CNF_OPEN edge %d \n", ne ); */
+
+	        delta_x = DELTA(ept->pt->x);
+	        delta_y = DELTA(ept->pt->y);
+/* printf("DELTAs (%f,%f)\n", delta_x, delta_y ); */
+	        if ( G_DIFF(delta_x,0.0F) && G_DIFF(delta_y,0.0F) )  {
+		/* This is a grid-edge-following edge */
+/* printf("This is a grid-edge-following edge\n"); */
+		/* No need to add points or shift */
+	        }
+	        else  {
+	            if ( G_DIFF(delta_x,0.0F) && !G_DIFF(delta_y,0.0F) )  {
+		/* First pt lies on vertical */
+/* printf("First pt lies on vertical (%f,%f)\n", ept->pt->x, ept->pt->y ); */
+		        if (  ( delta_y < 0.5F && G_DIFF(ept->pt->x,minx) ) ||
+		              ( delta_y > 0.5F && G_DIFF(ept->pt->x,maxx) ) )  {
+		    	    /* Reverse order */
+		    	    prep_RevEdge ( ne );
+/* printf("CNF_OPEN edge %d prep_RevEdge\n", ne ); */
+			}
+	            }
+	            else if ( G_DIFF(delta_y,0.0F) && !G_DIFF(delta_x,0.0F) )  {
+		        /* First pt lies on horizontal */
+/* printf("First pt lies on horizontal (%f,%f)\n", ept->pt->x, ept->pt->y ); */
+		        if (  ( delta_x > 0.5F && G_DIFF(ept->pt->y,miny) ) ||
+		              ( delta_x < 0.5F && G_DIFF(ept->pt->y,maxy) ) )  {
+		            /* Reverse order */
+		            prep_RevEdge ( ne );
+/* printf("CNF_OPEN edge %d prep_RevEdge\n", ne ); */
+		        }
+	            }
+/* printf("CNF_OPEN edge %d prep_ShiftEdge\n", ne ); */
+/* 	            prep_AddPtEdge ( ne ); */
+	            prep_ShiftEdge ( ne );
+	        }
+            }
+        }
+    }
+    else  {
+        for ( ne = 0; ne < _edges.nedges; ne++ )  {
+/* printf("CNF_CLOSED edge %d \n", ne ); */
+
+            if ( _edges.edge[ne]->first != NULL_CNF_EDGEPT &&
+		 _edges.edge[ne]->closed == CNF_CLOSED )  {
+
+	        /* Closed edge */
+		ept = _edges.edge[ne]->first;
+	        delta_x = DELTA(ept->pt->x);
+	        if ( !G_DIFF(delta_x,0.0F)  &&
+			(int)(ept->pt->x) == G_NINT(ept->pt->x) )  {
+		    /* Reverse order */
+		    prep_RevEdge ( ne );
+/* printf("CNF_CLOSED edge %d prep_RevEdge, delta_x=%e\n", ne, delta_x ); */
+	        }
+/* printf("CNF_CLOSED edge %d prep_ShiftEdge\n", ne ); */
+/* 	        prep_AddPtEdge ( ne ); */
+	        prep_ShiftEdge ( ne );
+	    }
+	}
+    }
+
+    return ( G_NORMAL );
+
+}
+
+/*=====================================================================*/
+
+void	prep_RevEdge ( int num_edge )
+/************************************************************************
+ * prep_RevEdge                                                    	*
+ *                                                                      *
+ * This function reverses the order of points of an edge.		*
+ *                                                                      *
+ * int prep_RevEdge  ( )                                 		*
+ *                                                                      *
+ * Input parameters:                                                    *
+ * num_edge	int		Which edge to reverse			*
+ *                                                                      *
+ * Output parameters:                                                   *
+ * none									*
+ *                                                                      *
+ **                                                                     *
+ * Log:                                                                 *
+ * D.W.Plummer/NCEP      4/04                                           *
+ ***********************************************************************/
+{
+CNF_EDGEPT	*ept, *last, *swap;
+/*---------------------------------------------------------------------*/
+    if ( _edges.edge[num_edge]->closed == CNF_OPEN )  {
+/* printf("REVERSING OPEN...\n"); */
+        ept = _edges.edge[num_edge]->first;
+        do {
+    	    ept = ept->next;
+        } while ( ept->next != NULL_CNF_EDGEPT );
+        _edges.edge[num_edge]->first = ept;
+        last = NULL_CNF_EDGEPT;
+
+    }
+    else  {
+/* printf("REVERSING CLOSED...\n"); */
+        last = _edges.edge[num_edge]->first;
+    }
+
+    ept = _edges.edge[num_edge]->first;
+/* printf("FIRST PT (%f,%f)...\n", _edges.edge[num_edge]->first->pt->x, */
+/* 	_edges.edge[num_edge]->first->pt->y ); */
+    do {
+        swap = ept->prev;
+	ept->prev = ept->next;
+	ept->next = swap;
+	ept = ept->next;
+    } while ( ept != last );
+
+}
+
+/*=====================================================================*/
+
+void	prep_ShiftEdge ( int num_edge )
+/************************************************************************
+ * prep_ShiftEdge                                                    	*
+ *                                                                      *
+ * This function shifts the raw edge points to the opposite grid point.	*
+ *                                                                      *
+ * int prep_ShiftEdge  ( )                                 		*
+ *                                                                      *
+ * Input parameters:                                                    *
+ * num_edge	int		Which edge to shift			*
+ *                                                                      *
+ * Output parameters:                                                   *
+ * none									*
+ *                                                                      *
+ **                                                                     *
+ * Log:                                                                 *
+ * D.W.Plummer/NCEP      4/04                                           *
+ ***********************************************************************/
+{
+CNF_EDGEPT	*ept;
+float	delta_x, delta_y;
+/*---------------------------------------------------------------------*/
+
+    ept = _edges.edge[num_edge]->first;
+    do {
+	delta_x = DELTA(ept->pt->x);
+	delta_y = DELTA(ept->pt->y);
+	if ( !G_DIFF(delta_x,0.0F) )  {
+	    if ( delta_x > 0.5F )
+		ept->pt->x = (int)ept->pt->x;
+	    else
+		ept->pt->x = (int)(ept->pt->x + 1.0F);
+	}
+	if ( !G_DIFF(delta_y,0.0F) )  {
+	    if ( delta_y > 0.5F )
+		ept->pt->y = (int)ept->pt->y;
+	    else
+		ept->pt->y = (int)(ept->pt->y + 1.0F);
+	}
+	ept = ept->next;
+    } while ( ept != _edges.edge[num_edge]->first  &&
+	      ept != NULL_CNF_EDGEPT );
+
+}
+
+/*=====================================================================*/
+
+void	prep_AddPtEdge ( int num_edge )
+/************************************************************************
+ * prep_AddPtEdge                                                    	*
+ *                                                                      *
+ * This function adds points to edge diagonals.				*
+ *                                                                      *
+ * int prep_AddPtEdge  ( )                                 		*
+ *                                                                      *
+ * Input parameters:                                                    *
+ * num_edge	int		Which edge to check			*
+ *                                                                      *
+ * Output parameters:                                                   *
+ * none									*
+ *                                                                      *
+ **                                                                     *
+ * Log:                                                                 *
+ * D.W.Plummer/NCEP      4/04                                           *
+ ***********************************************************************/
+{
+CNF_EDGEPT	*ept, *insert;
+float	delta_x, delta_y, delta_x_next, delta_y_next;
+/*---------------------------------------------------------------------*/
+
+    ept = _edges.edge[num_edge]->first;
+    do {
+	delta_x = DELTA(ept->pt->x);
+	delta_y = DELTA(ept->pt->y);
+	delta_x_next = DELTA(ept->next->pt->x);
+	delta_y_next = DELTA(ept->next->pt->y);
+	insert = NULL_CNF_EDGEPT;
+	if ( !G_DIFF(delta_x,0.0F) && G_DIFF(delta_y,0.0F) &&
+	     G_DIFF(delta_x_next,0.0F) && !G_DIFF(delta_y_next,0.0F) )  {
+	    insert = cnf_new_edge_pt ( ept->pt->x, ept->next->pt->y );
+	}
+	else if ( G_DIFF(delta_x,0.0F) && !G_DIFF(delta_y,0.0F) &&
+		  !G_DIFF(delta_x_next,0.0F) && G_DIFF(delta_y_next,0.0F) )  {
+	    insert = cnf_new_edge_pt ( ept->next->pt->x, ept->pt->y );
+	}
+	if ( insert != NULL_CNF_EDGEPT )  {
+	    insert->next = ept->next;
+	    insert->prev = ept;
+	    ept->next->prev = insert;
+	    ept->next = insert;
+	    insert->cntr = NULL_CNF_CNTR;
+	    insert->drct = IMISSD;
+	}
+	ept = ept->next;
+    } while ( ept->next != _edges.edge[num_edge]->first  &&
+	      ept->next != NULL_CNF_EDGEPT );
+
+}
+
+/*=====================================================================*/
+

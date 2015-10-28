@@ -1,0 +1,17 @@
+bnds=SSA|<AREA>HPC050|true
+
+boundsTableAlias=SSA
+
+columnName=AREA
+
+columnvale=HPC050
+
+bndsTable=select t.table_name from config.clo t where t.alias_name = upper('SSA')
+
+1
+
+queryBnds=SELECT AsBinary(t.the_geom) FROM bounds.ssa_bnd.tbl.info t WHERE t.AREA like 'HPC050%'
+
+Cannot find bounds for SSA
+2
+3

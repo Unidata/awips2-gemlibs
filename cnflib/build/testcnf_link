@@ -1,0 +1,13 @@
+$CC $CFLAGS -c testcnf.c
+export GEMLIB=$OS_LIB/libgemlib.a
+export CGEMLIB=$OS_LIB/libcgemlib.a
+export APPL=$OS_LIB/libappl.a
+export SYSLIB=$OS_LIB/libsyslib.a
+# $FC $LDFLAGS -o $GEMEXE/testcnf testcnf.o \
+$FC $LDFLAGS -o testcnf.$NA_OS testcnf.o \
+		$OS_LIB/libgdcfil.a   \
+		libcnf.a \
+		$GEMLIB $CGEMLIB -lGPC $APPL $SYSLIB $GEMLIB -lm \
+                -ltextlib -lxml2 -lxslt -liconv -lz $GEMLIB
+#		$GEMLIB $CGEMLIB libcnf.a -lm
+$RM *.o

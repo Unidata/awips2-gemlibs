@@ -1,0 +1,55 @@
+/* header & common file */
+DEVCHR.CMN       
+gemprm.h     
+GEMPRM.PRM   
+MCHPRM.PRM  
+grphgd.cmn    
+uscore.h
+proto.h
+proto_gemlib.h
+
+/* new subroutins for grphgd */
+g2gdriver.c
+
+ggchkbnds.f   
+ggorigrng.f  
+ggdriver.f    
+ggsimprng.f  
+ggfindintr.f  
+ggaddline.f  
+ggsetup.f      
+ggcalc.f    
+
+
+/* utility functions needed for grphgd */
+cgrqrol.c        
+cgrsegdist.c
+cgrvectxprod.c     
+incatmap.c    
+indiscrete.c 
+indlines.c  
+stldsp.f
+stnull.f
+
+/* legacy subroutines needed for grphgd */
+gdline.f     
+glimit.f        
+gdlwei.f     
+glvalu.f      
+gsmoot.f      
+lnsgi1.f    
+ggedge.f      
+ggsort.c     
+gnextv.f      
+gsortd.f      
+lnsgin.f    
+gindex.f     
+gradls.f      
+gweigs.f      
+gbound.f         
+gindx1.f     
+gciijj.f         
+gglims.f      
+glastv.f     
+
+*******************************************************

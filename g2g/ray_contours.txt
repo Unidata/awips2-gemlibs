@@ -1,0 +1,59 @@
+    /**
+     * Assumes user sets up world coordinates from 1.0 to float(nx) and 1.0 to
+     * float(ny).
+     * 
+     * @param contourArray
+     *            Array to contour
+     * @param workspace
+     *            Workspace.
+     * @param totalDimension
+     *            First dimension of input arrays.
+     * @param IGridDimension
+     *            First (horizontal) dimension of input grid.
+     * @param JGridDimension
+     *            Second (vertical) dimension of input grid.
+     * @param scale
+     *            Contour grid as if it were multiplied by this ....
+     * @param offset
+     *            and then added to by this before contouring.
+     * @param mode
+     *            If mode<0 then -mode is approximate number of contours and
+     *            seed is minimum contour increment. If mode=0 then seed is
+     *            contour increment. If mode>0 seed is array of contour values
+     *            to use, mode is number of contours.
+     * @param contourControl
+     *            Value(s) that control contouring (see mode).
+     * @param xpoints
+     *            x-coords in grid space of contours.
+     * @param ypoints
+     *            y-coords in grid space of contours.
+     * @param numBufferPoints
+     *            Number of points in the buffer.
+     * @param badlow
+     *            Smallest
+     * @param badhigh
+     *            and largest values which will be ignored upon contouring. If
+     *            badlow>badhigh, then no missing value handling is done.
+     * @return status Logically true if input was meaningful
+     */
+    public static int fortconbuf(float[] contourArray, int[] workspace,
+            int totalDimension, int IGridDimension, int JGridDimension,
+            float scale, float offset, int mode, float[] contourControl,
+            float[] xpoints, float[] ypoints, int[] numBufferPoints,
+            float badlow, float badhigh) {
+        int status = 0;
+        int mnx[] = { totalDimension };
+        int nx[] = { IGridDimension };
+        int ny[] = { JGridDimension };
+        float tscale[] = { scale };
+        float toffset[] = { offset };
+        int tmode[] = { mode };
+        float badlo[] = { badlow };
+        float badhi[] = { badhigh };
+        int tstatus[] = { status };
+        Meteolibrary.fortconbuf(contourArray, 0, workspace, 0, mnx, 0, nx, 0,
+                ny, 0, tscale, 0, toffset, 0, tmode, 0, contourControl, 0,
+                xpoints, 0, ypoints, 0, numBufferPoints, 0, badlo, 0, badhi, 0,
+                tstatus, 0);
+        return status;
+    }
