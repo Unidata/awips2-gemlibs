@@ -91,8 +91,7 @@ myFflags="-I. -I$OS_INC -I$GEMPAK/include -I$NSHARP -fPIC -g -c -Wtabs -fno-seco
 
 # for shared object
 # FLAGS
-myLinkflags="
--L/usr/local/Cellar/gcc/4.9.2_1/lib/gcc/4.9/ -L/opt/local/lib -L$OS_LIB -L. -L./Sndglib -L/usr/X11R6/lib \
+myLinkflags="-L/usr/local/Cellar/gcc/4.9.2_1/lib/gcc/4.9/ -L/opt/local/lib -L$OS_LIB -L. -L./Sndglib -L/usr/X11R6/lib \
 -shared -Wl -Wno-return-type,-install_name,libbignsharp.dylib -o libbignsharp.dylib"
 
 # -L$OS_LIB -L./Sndglib -L/usr/X11R6/lib -I. -I./Sndglib -I$OS_INC \
@@ -103,13 +102,13 @@ myLinkflags="
  myLibsInc="$OS_LIB/ginitp_alt.o $OS_LIB/gendp_alt.o $OS_LIB/libnxmlib.a $OS_LIB/libsnlist.a \
  $OS_LIB/libsflist.a $OS_LIB/libgemlib.a $OS_LIB/libcgemlib.a $OS_LIB/libgplt.a $OS_LIB/libdevice.a \
  $OS_LIB/libxwp.a $OS_LIB/libxw.a $OS_LIB/libps.a  $OS_LIB/libgn.a $OS_LIB/libcgemlib.a $OS_LIB/libgemlib.a \
- $OS_LIB/libnetcdf.a $OS_LIB/libtextlib.a $OS_LIB/nwx.a  $OS_LIB/nsharp.a  $OS_LIB/libxml2.a $OS_LIB/libxslt.a \
+ $OS_LIB/libnetcdf.a $OS_LIB/libtextlib.a $OS_LIB/nwx.a $OS_LIB/libxml2.a $OS_LIB/libxslt.a \
  $OS_LIB/libgemlib.a $OS_LIB/libcgemlib.a $OS_LIB/librsl.a $OS_LIB/libbz2.a"
 
 
 # TAIL
- myLinktail="-I. -I./Sndglib -I$OS_INC \
-  -I$GEMPAK/include -I$NWX -I$NSHARP -I/opt/X11/include/X11 -I/usr/include -I/usr/include/Xm -I/opt/local/include/ -I/opt/local/include -lhdf5 -lgfortran -ljasper -lpng -liconv -lc -lXt -lX11 -lz -lm -lXm"
+ myLinktail="-I$OS_INC \
+  -I$GEMPAK/include -I$NWX -I$NSHARP -I. -I./Sndglib  -I/opt/X11/include/X11 -I/usr/include -I/usr/include/Xm -I/opt/local/include/ -I/opt/local/include -lhdf5 -lgfortran -ljasper -lpng -liconv -lc -lXt -lX11 -lz -lm -lXm"
 ##
 ## RUN
 ##
