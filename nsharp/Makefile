@@ -15,23 +15,29 @@ FC	= gfortran # g77
 #debug	FC	= g77 -g -DDEBUG_JL
 
 
-FFLAGS	= -fno-second-underscore -I$(OS_INC) -I$(GEMINC)
+FFLAGS	= -fno-second-underscore -I$(OS_INC) -I$(GEMINC) -I/opt/local/lib
 CFLAGS_G = -DUNDERSCORE -DLinux -Wno-return-type
 CFLAGS	= $(CFLAGS_G) -I. -I./Sndglib -I$(OS_INC) -I$(GEMINC) \
 	-I$(NWX) -I$(NSHARP) \
-	-I/opt/X11/include -I/usr/include/Xm
+	-I/opt/X11/include -I/usr/include/Xm -I/opt/local/include
 
 LFLAGS	=$(LFLAGS_G) $(LFLAGS_R)
 
-XLIBS	= -L/usr/X11R6/lib -lXm -lXt -lX11
+XLIBS	= -L/usr/X11R6/lib -I/opt/local/include -lXt -lX11
+#XLIBS	= -L/usr/X11R6/lib -lXm -lXt -lX11
 
-LIBS	= -L./Sndglib -lsndg \
-	$(OS_LIB)/ginitp_alt.o $(OS_LIB)/gendp_alt.o \
-	-L$(OS_LIB) -lsnlist -lsnlib -lsflist -lsflib -lnxmlib -ldiaglib \
-	-lgemlib -lprmcnvlib -lgridlib -lgplt -lgridlib -lcgemlib \
-	-ldevice -lxwp -lxw -lps -lgn -lgemlib -lnetcdf \
-	-ltextlib -lxml2 -lxslt -liconv -lbz2 \
-	$(XLIBS) -lz -lm
+#LIBS	= -L./Sndglib -lsndg \
+#	$(OS_LIB)/ginitp_alt.o $(OS_LIB)/gendp_alt.o \
+#	-L$(OS_LIB) -lsnlist -lsnlib -lsflist -lsflib -lnxmlib -ldiaglib \
+#	-lgemlib -lprmcnvlib -lgridlib -lgplt -lgridlib -lcgemlib \
+#	-ldevice -lxwp -lxw -lps -lgn -lgemlib -lnetcdf \
+#	-ltextlib -lxml2 -lxslt -liconv -lbz2 \
+#	$(XLIBS) -lz -lm
+
+LIBS    = -L./Sndglib -lsndg \
+        -L$(OS_LIB) -I$(OS_LIB)/xw.a \
+        -lxslt -liconv -lbz2 \
+        $(XLIBS) -lz -lm
 
 NOBJS	= xinitd.o xwvid1.o xwvid3.o xwvid6.o xwvid2.o \
 	xwvid5.o decoder.o readdata.o sharp95.o \
@@ -51,7 +57,7 @@ $(PROG)::
 	@$(MAKE) _nsharp
 
 _nsharp:: $(NOBJS) sndglib
-	$(FC) -o $(PROG) $(NOBJS) $(LIBS)
+	$(FC) $(FFLAGS) -o $(PROG) $(NOBJS) $(LIBS) 
 	
 
 sndglib:
