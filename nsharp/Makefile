@@ -7,19 +7,19 @@
 # do NOT use -O flag for optimization as it dumps core.
 #
 
-PROG	= nsharp.exe
+PROG	= nsharp
 DEBUG	= 0
 CC	= gcc
-FC	= g77
+FC	= gfortran # g77
 #debug	CC	= gcc -g -DDEBUG_JL
 #debug	FC	= g77 -g -DDEBUG_JL
 
 
 FFLAGS	= -fno-second-underscore -I$(OS_INC) -I$(GEMINC)
-CFLAGS_G = -DUNDERSCORE -DLinux
+CFLAGS_G = -DUNDERSCORE -DLinux -Wno-return-type
 CFLAGS	= $(CFLAGS_G) -I. -I./Sndglib -I$(OS_INC) -I$(GEMINC) \
 	-I$(NWX) -I$(NSHARP) \
-	-I/usr/include/X11R6 -I/usr/X11R6/include/Xm
+	-I/opt/X11/include -I/usr/include/Xm
 
 LFLAGS	=$(LFLAGS_G) $(LFLAGS_R)
 

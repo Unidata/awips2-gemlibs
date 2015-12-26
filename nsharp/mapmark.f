@@ -73,7 +73,7 @@ C
 C*	Loop over all of the points.
 C
 	DO  ip = 1, nltln
-	    IF  ( .not. ERMISS ( ivalue(ip) ) )  THEN
+	    IF  ( .not. ERMISS ( REAL(ivalue(ip)) ) )  THEN
 C
 C*		Set the color based on the data values and the
 C*		break-point values.
