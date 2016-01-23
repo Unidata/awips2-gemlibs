@@ -2,7 +2,7 @@
 C************************************************************************
 C* G2G_CALC                                                             *
 C*                                                                      *
-C* This subroutine does all the original GRPHGD calculation in grid	* 
+C* This subroutine does all the original GRPHGD calculation in grid	*
 C* space. The following parameters should be set before calling this	*
 C* subroutine:								*
 C*									*
@@ -19,10 +19,10 @@ C*    a. Inputs from the original contour lines and converted into	*
 C*       grid space: fi, fj, fimm, fjmm. 				*
 C*	COMMON  / GGLINE /  nlines, npts, value, closed,		*
 C*     		            rngi, rngj, fi, fj				*
-C*      COMMON  / GGMM /  nmm, valuemm, fimm, fjmm			* 
+C*      COMMON  / GGMM /  nmm, valuemm, fimm, fjmm			*
 C*                                                                      *
 C*      COMMON  / GGORIG / nltlnlns, noriglns, nlatlons, orignpts,	*
-C*                         origfi, origfjnmm, 				* 
+C*                         origfi, origfjnmm, 				*
 C*                                                                      *
 C*    b. Intersection points from g2g_findint.f, rngi, rngj		*
 C*       								*
@@ -77,23 +77,23 @@ C
             proces = .false.
         END IF
 C
-C*       Check to see if grid dimensions are too big for 
+C*       Check to see if grid dimensions are too big for
 C*	 intersection arrays.
 C
         IF ( ( kx + ky ) .gt. MAXDIM )  THEN
 	    iret = +2
-            WRITE(6,*) 'Total of grid dimensions (', kx+ky, 
+            WRITE(6,*) 'Total of grid dimensions (', kx+ky,
      & 			') exceeds maximum allowed (', MAXDIM, ')'
 	    proces = .false.
         END IF
 C
 	IF ( proces )  THEN
-	   
-	   hstflg = .true.           
+
+	   hstflg = .true.
 	   IF ( hstgrd .ne. 1 ) THEN
 	       hstflg = .false.
 	   END IF
-	   
+
 C
 C*	     Initialize history and data arrays
 C
@@ -101,7 +101,7 @@ C
 	    imx = kx
 	    jmn = 1
 	    jmx = ky
-            	    
+
 	    IF ( hstflg )
      &	         WRITE(6,*) 'Total number of lines = ', nlines,
      &		    ' (', nint((nlines*100.0)/MAXLIN),'% of MAX ALLOWED)'
@@ -114,20 +114,20 @@ C
 		    grid(ij) = defalt
 		    hist(ij) = INIT
 		END DO
-C		
+C
 		proces = .false.
 C
 	    END IF
 C
         END IF
-	   
+
 C
 C*	NOW start calculation - discrete or continuous
 C
 C	Note: Bounds search is done outside of native code.
 C
        IF ( proces ) THEN
-C	    
+C
 C*          GRAPH-TO-GRID calculation begins......
 C*
 C*	    Check whether it is discrete or continuous
@@ -141,14 +141,14 @@ C
 C*	        Perform DLINE SEARCH
 C
 	       CALL GDLINE ( imn, imx, jmn, jmx, grid, hist, kx, ky, ier )
-	       IF ( hstflg ) 
+	       IF ( hstflg )
      +	            WRITE (6,*) 'DLINE SEARCH COMPLETE, ier =', ier
 C
 C*	        Perform DLINE WEIGHTED SEARCH
 C
 	       CALL GDLWEI ( imn, imx, jmn, jmx, grid, hist, kx, ky, ier )
-	       IF ( hstflg ) 
-     +	            WRITE (6,*) 'DLINE WEIGHTED SEARCH COMPLETE, ier =', ier
+	       IF ( hstflg )
+     +	            WRITE (6,*) 'DLINE WEIGHTED SEARCH DONE, ier =', ier
 C
 	    ELSE
 C
@@ -157,14 +157,14 @@ C
 C*	         Perform RADIAL SEARCH
 C
 	       CALL GRADLS (imn, imx, jmn, jmx, grid, hist, kx, ky, ier)
-	       IF ( hstflg ) 
+	       IF ( hstflg )
      +	            WRITE (6,*) 'RADIAL SEARCH COMPLETE, ier =', ier
 C
 C*	         Perform LIKE-VALUE SEARCH
 C
 	        CALL GLVALU ( imn, imx, jmn, jmx, grid, hist, kx,
      +							ky, ier )
-	       IF ( hstflg ) 
+	       IF ( hstflg )
      +	            WRITE (6,*) 'LIKE-VALUE SEARCH COMPLETE, ier =', ier
 C
 C*	        Check the state of DLINES. If yes, add calls to
@@ -178,7 +178,7 @@ C*	            Perform DLINE SEARCH
 C
 	          CALL GDLINE ( imn, imx, jmn, jmx, grid, hist, kx,
      +							ky, ier )
-	          IF ( hstflg ) 
+	          IF ( hstflg )
      +	               WRITE (6,*) 'DLINE SEARCH COMPLETE, ier =', ier
 C
 	       END IF
@@ -186,19 +186,19 @@ C
 C*	        Perform WEIGHTED SEARCH
 C
  	       CALL GWEIGS (imn, imx, jmn, jmx, grid, hist, kx, ky, ier)
- 	       IF ( hstflg ) 
+ 	       IF ( hstflg )
      +	           WRITE (6,*) 'WEIGHTED SEARCH COMPLETE, ier =', ier
 C
 C*	        Perform SMOOTHING
 C
  	       CALL GSMOOT (imn, imx, jmn, jmx, grid, hist, kx, ky, ier)
- 	       IF ( hstflg ) 
+ 	       IF ( hstflg )
      +	           WRITE (6,*) 'SMOOTHING COMPLETE, ier =', ier
 C
 C*	        Apply limits, if any.
-C 
+C
  	        CALL GGLIMS (imn, imx, jmn, jmx, grid, hist, kx, ky, ier)
- 	        IF ( hstflg ) 
+ 	        IF ( hstflg )
      +	          WRITE (6,*) 'LIMITS COMPLETE, ier =', ier
 C
 C*	      This is the end of continous case
@@ -206,7 +206,7 @@ C
 	    ENDIF
 C
 C*	End of claculation
-C	    
+C
        ENDIF
 C
 C
@@ -226,7 +226,7 @@ C
 		    nmiss = nmiss + 1
 		END IF
 	    END DO
-C	    	    
+C
 	    WRITE(6,*) 'Total number of grid points = ', ngpts
 	    WRITE(6,*) 'Grid minimum and maximum = ', grdmin, grdmax
 	    WRITE(6,*) 'Number of missing values = ', nmiss
