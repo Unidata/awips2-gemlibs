@@ -67,5 +67,5 @@ links:
 	@-$(GEMPAK)/install/setup_links
 
 clean:
-	rm -f $(PROG) $(NOBJS)
-	cd ./Sndglib; $(MAKE) clean
+	rm -f $(PROG) $(NOBJS) *.o
+	cd ./Sndglib; $(MAKE) clean ; rm -rf *.o

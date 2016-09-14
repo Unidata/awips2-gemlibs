@@ -116,6 +116,24 @@ void initStaticGlobalsMem(void){
 	strcpy(new->stid, "ARCH"); // dont care for us
 	strcpy(new->dattim, "ARCH");// dont care for us
 }
+void setSarsSupcellFileName(char sarsFlName[],int sarsLen, char supercellFlName[], int supLen){
+        //init GLOBALS sars_filename and  sup_filename (for supercell)
+        //the following statements are copied from read_nsharp_config();
+        //printf("input super file = %s\n",supercellFlName);
+        int       i;
+        for(i=0; i < sizeof(sars_filename); i++){
+                sars_filename[i]=0x0;
+        }
+        if(sarsLen >0 && sarsLen<= sizeof(sars_filename))
+                strncpy(sars_filename, sarsFlName, sarsLen); //"/export/cdbsrv/cchen/Desktop/bigsharp9-original/nlist.txt");
+        for(i=0; i < sizeof(sup_filename); i++){
+                sup_filename[i]=0x0;
+        }
+        if(supLen>0 && supLen<= sizeof(sup_filename))
+                strncpy(sup_filename, supercellFlName, supLen);
+
+        //printf("copied super file = %s\n",sup_filename);
+}
 Sounding *getSoundingAndInit( short nlev)
 {
 	Sounding *new=&staticSounding;

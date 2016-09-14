@@ -1,6 +1,7 @@
 #!/bin/bash
 #
-# Updated for Unidata AWIPS II OS X, December 2015
+# Dec 15, 2015 mjames@ucar	Created
+# Sep 13, 2016 mjames@ucar	Updated for 16.2.2 using awips2-ncep/viz/gov.noaa.nws.ncep.ui.nsharp
 #
 # 1. Create a Java project and source folder....
 #
@@ -57,73 +58,33 @@ done
 #	gdlist/gdlist.h for gdldsp.c.  Note that diaglib/dg/*.h has layers of *.h, de.h, dl.h, df.h, dv.h.
 #
 # We need to compile here, not link.
-#CFLAGS="-DUNDERSCORE -DLinux -Wno-return-type -I. -I./Sndglib -I$OS_INC -I$GEMPAK/include \
-#        -I$NWX -I$NSHARP -I/opt/X11/include -I/usr/include -I/opt/local/include"
-#myCflags="$CFLAGS -DUNDERSCORE -fPIC -DDEBUG -c"
-
 
 myLibs="$OS_LIB/ginitp_alt.o $OS_LIB/gendp_alt.o"
-#$OS_LIB/libsnlist.a $OS_LIB/libsflist.a \
-#$OS_LIB/libnxmlib.a $OS_LIB/libgemlib.a $OS_LIB/libgplt.a \
-#$OS_LIB/libcgemlib.a $OS_LIB/libdevice.a $OS_LIB/libxwp.a \
-#$OS_LIB/libxw.a $OS_LIB/libps.a $OS_LIB/libgn.a $OS_LIB/librsl.a $OS_LIB/libgemlib.a $OS_LIB/libgplt.a $OS_LIB/libnetcdf.a \
-#$OS_LIB/libtextlib.a $OS_LIB/libxml2.a $OS_LIB/libxslt.a $OS_LIB/libbz2.a $OS_LIB/libnsharp.a"
-#LIBS   = -L./Sndglib -lsndg \
-#       $(OS_LIB)/ginitp_alt.o $(OS_LIB)/gendp_alt.o \
-#       -L$(OS_LIB) -lsnlist -lsnlib -lsflist -lsflib -lnxmlib -ldiaglib \
-#       -lgemlib -lprmcnvlib -lgridlib -lgplt -lgridlib -lcgemlib \
-#       -ldevice -lxwp -lxw -lps -lgn -lgemlib -lnetcdf \
-#       -ltextlib -lxml2 -lxslt -liconv -lbz2 \
-#       $(XLIBS) -lz -lm
-
-# clang -I/opt/local/include -I./Sndglib -I/Users/mj/gempak/gempak/include
-# -I/Users/mj/gempak/gempak/source/programs/gui/nsharp -I/Users/mj/gempak/os/darwin/include
-# -I/Users/mj/gempak/gempak/source/programs/gui/nwx -I/usr/include -I/opt/local/lib -DUNDERSCORE -fPIC -DDEBUG -c *.c Sndglib/*.c
-
-##
-## SET
-##
 
 myCflags="$CFLAGS -I. -I./Sndglib -I$NSHARP  -I$GEMPAK/include  -I$OS_INC -I$NWX \
--I/opt/X11/include/X11 -I/usr/include/Xm -I/opt/local/include -I/usr/include/malloc -Wno-return-type -DUNDERSCORE -fPIC -DDEBUG -c"
+-I/opt/X11/include/X11 -I/usr/include/Xm -I/opt/local/include -I/usr/include/malloc -Wcomment -Wno-return-type -Wincompatible-pointer-types -DUNDERSCORE -fPIC -DDEBUG -c"
 
-myFflags="-I. -I$OS_INC -I$GEMPAK/include -I$NSHARP -fPIC -g -c -Wtabs -fno-second-underscore"
+myFflags="-I. -I$OS_INC -I$GEMPAK/include -I$NSHARP -fPIC -g -c -fno-second-underscore -fmax-errors=200 -std=f95"
 
 # for shared object
-# FLAGS
 myLinkflags="-L/usr/local/Cellar/gcc/4.9.2_1/lib/gcc/4.9/ -L/opt/local/lib -L$OS_LIB -L. -L./Sndglib -L/usr/X11R6/lib \
--shared -Wl -Wno-return-type,-install_name,libbignsharp.dylib -o libbignsharp.dylib"
-
-# -L$OS_LIB -L./Sndglib -L/usr/X11R6/lib -I. -I./Sndglib -I$OS_INC \
- #-I$GEMPAK/include -I$NWX -I$NSHARP -I/opt/X11/include -I/usr/include -I/usr/include/Xm -I/opt/local/include/ #-I/opt/local/include
-
+-shared -Wl -Wcomment -Wincompatible-pointer-types -Wimplicit-function-declaration -Wno-return-type,-install_name,libbignsharp.dylib -o libbignsharp.dylib"
 
 # INCLUDE
- myLibsInc="$OS_LIB/ginitp_alt.o $OS_LIB/gendp_alt.o $OS_LIB/libnxmlib.a $OS_LIB/libsnlist.a \
+myLibsInc="$OS_LIB/ginitp_alt.o $OS_LIB/gendp_alt.o $OS_LIB/libnxmlib.a $OS_LIB/libsnlist.a \
  $OS_LIB/libsflist.a $OS_LIB/libgemlib.a $OS_LIB/libcgemlib.a $OS_LIB/libgplt.a $OS_LIB/libdevice.a \
  $OS_LIB/libxwp.a $OS_LIB/libxw.a $OS_LIB/libps.a  $OS_LIB/libgn.a $OS_LIB/libcgemlib.a $OS_LIB/libgemlib.a \
  $OS_LIB/libnetcdf.a $OS_LIB/libtextlib.a $OS_LIB/libxml2.a $OS_LIB/libxslt.a \
  $OS_LIB/libgemlib.a $OS_LIB/libcgemlib.a $OS_LIB/librsl.a $OS_LIB/libbz2.a"
 
-
 # TAIL
- myLinktail="-I$OS_INC \
+myLinktail="-I$OS_INC \
   -I$GEMPAK/include -I$NWX -I$NSHARP -I. -I./Sndglib  -I/opt/X11/include/X11 -I/usr/include -I/usr/include/Xm -I/opt/local/include/ -I/opt/local/include -lhdf5 -lgfortran -ljasper -lpng -liconv -lc -lXt -lX11 -lz -lm -lXm"
-##
 ## RUN
-##
-
-echo ""
-echo "$CC $myCflags *.c Sndglib/*.c"
-echo ""
-echo "$FC $myFflags *.f"
-echo ""
-echo "$CC $myLinkflags *.o $myLibsInc $myLinktail"
-
 $CC $myCflags *.c Sndglib/*.c
 $FC $myFflags *.f
 $CC $myLinkflags *.o $myLibsInc $myLinktail
-#	gcc "$myLinkflags" *.o $OS_LIB/libgdlist.a $myLibs $myLinktail"
+
 
 echo ""
 echo "$CC $myCflags *.c Sndglib/*.c"
@@ -131,22 +92,7 @@ echo ""
 echo "$FC $myFflags *.f"
 echo ""
 echo "$CC $myLinkflags *.o $myLibsInc $myLinktail"
-
-exit
-
-check=`ls -altr libbignsharp.*`
-echo $check
-
-exit
-
-echo ""
-if [[ $check == "libbignsharp.so" ]]; then
-	echo "****** Shared library is created ****** "
-	echo ""
-#	cp libbignsharp.so $DEV_BASE/workspace/gov.noaa.nws.ncep.ui.nsharp.linux32
-else
-	echo "****** Houston, we got problems ****** "
-  echo ""
-fi
+pwd
+cp libbignsharp.dylib ~/awips2-ncep/viz/gov.noaa.nws.ncep.ui.nsharp.macosx/
 
 exit
